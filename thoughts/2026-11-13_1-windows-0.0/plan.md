@@ -10,12 +10,11 @@ The work is split into phases (section 6). Each phase is one commit, reviewed an
 
 ### Open questions
 
-Both are minor blockers: I'll ask again, with this recommendation, before the phase that needs the answer.
+This is a minor blocker: I'll ask again, with this recommendation, before the phase that needs the answer.
 
 | # | Question | Needed by | Recommendation |
 |---|---|---|---|
 | M9 | Release version | Phase 6 | Keep **0.1.0** during development and bump to **1.0.0** in Phase 6 once the release checklist passes, matching the Mac app's 1.0. |
-| M10 | Unit tests with a fake `Transport` (5.0) | Phase 2 | **Yes.** Add `windows/tests/`: one small test exe with plain asserts and no framework. `build.ps1` builds it and runs it on every build, and a failing test fails the build. It covers the request bytes (`11 FF 07 1A 00 …`), response matching, skipping unsolicited reports, HID++ errors, a missing feature, and a read-back that isn't 0, all without the headset. Cost: about 150 lines and roughly 1 s of build time. |
 
 ### Decisions
 
@@ -36,6 +35,7 @@ Answered 2026-11-21.
 | T2 | Toolchain | **VS 2026 Build Tools 18.12 (MSVC 14.52)**, installed 2026-11-21 with `winget install --id Microsoft.VisualStudio.BuildTools` (VCTools workload + recommended, which brings the newest Windows SDK). **VS 2019 Build Tools is removed** once the new toolchain is validated (Phase 0). |
 | A1 | Code structure, with RGB and other features in mind | **Hybrid** (decided after Phase 1). Classes for what owns a resource or keeps state, free functions for operations. One interface, `Transport`, because there really are several implementations (Windows now; Linux, Mac and tests later). No inheritance hierarchies. Errors are `std::expected` values, not exceptions. See 5.0. |
 | L1 | Conversation language | **English** from 2026-11-21, at your request. This overrides the spec's pt-BR. Windows UI paths stay in their English names. |
+| M10 | Unit tests with a fake `Transport` (5.0) | **Yes** (answered at the start of Phase 2). `windows/tests/tests.cpp` builds into one small test exe, with plain checks and no framework. `build.ps1` builds and runs it on every build, before the app is linked, and a failing test fails the build. The tests need no headset. They cover the request bytes (`11 FF 07 1A 00 …`), response matching, skipping unsolicited reports, HID++ errors, a missing feature, timeouts, write errors and the error text. A read-back that isn't 0 is covered in Phase 3, with `Apply`. |
 
 Decisions made earlier in the conversation (installer, detection, read-back, Quit…) are in section 3.
 
@@ -155,7 +155,7 @@ HID: \\?\HID#VID_046D&PID_0A89&MI_03&Col01#…  UsagePage 0x000C Usage 0x0001  i
 
 | Type | Kind | Owns / does | File | Phase |
 |---|---|---|---|---|
-| `hidpp::Transport` | interface | Writes one report, and reads one report with a deadline | `hidpp.h` | 2 |
+| `hidpp::Transport` | interface | Writes one report, and reads one report with a deadline. Implemented by `WinHidTransport`, by the tests' `FakeTransport`, and by `--diag`'s `RecordingTransport`, which wraps the real one to log the traffic. | `hidpp.h` | 2 |
 | `hidpp::Device` | class | Builds requests, matches responses, skips unsolicited reports, caches feature indexes | `hidpp.*` | 2 |
 | `hidpp::GetSidetone`, `SetSidetone` (later `SetLeds`, EQ) | free functions on `Device&` | One HID++ call each | `hidpp.*` | 2 |
 | `WinHidTransport` | class implementing `Transport` | Finds and opens the G635's HID++ collection and does the overlapped I/O. Closes its handle when destroyed. | `hid_windows.*` | 2 |
@@ -213,7 +213,8 @@ The worker, detection, retries and transport stay as they are.
 - **`Open()`**, a static factory:
   1. `HidD_GetHidGuid` + `CM_Get_Device_Interface_List`, keeping the paths that contain `vid_046d&pid_0a89`.
   2. Open each path with access 0 and call `HidP_GetCaps`. Pick UsagePage `0xFF43` / Usage `0x0202`.
-  3. Reopen it with `GENERIC_READ|GENERIC_WRITE` and `FILE_FLAG_OVERLAPPED`. Fail if the in or out report length is below 5.
+     It must also have in and out report lengths of at least 20 bytes, a HID++ long report.
+  3. Reopen it with `GENERIC_READ|GENERIC_WRITE` and `FILE_FLAG_OVERLAPPED`.
   4. `HidD_FlushQueue`.
 - **`Write`:** overlapped `WriteFile` with a 1 s timeout, and `CancelIoEx` on timeout.
 - **`Read`:** overlapped `ReadFile` until the deadline.
@@ -288,6 +289,7 @@ States, menu, tooltip and icon dimming follow the spec's table.
 | `--uninstall` | From Settings › Apps. **No dialog** (M4). Uninstall steps. |
 | Tray › Uninstall… | Spec's confirmation dialog, default Cancel. Then the uninstall steps in-process. |
 | `--diag` | Section 5.5 |
+| Any other arguments | Logged, then exit code 2, with no UI |
 
 **Install steps.**
 1. Close the running instance: find its window, `PostMessage(WM_CLOSE)`, wait up to 5 s on its process, and `TerminateProcess` if it is still there.
@@ -323,9 +325,18 @@ Runs without the mutex or tray, so it can run while the tray instance is running
 - every HID collection for 046D/0A89, with path, usage page and usage, and in/out/feature lengths, marking the one picked;
 - HID++ version, firmware, and the index of `0x8300`;
 - the level read **before**, the write result (bytes, or `GetLastError` + `FormatMessageW`), and the level read **after**;
-- a note: "Sidetone is only audible while an app uses the mic (e.g. Sound › Recording)."
+- the **HID++ traffic**: every report sent and received, in hex. A `RecordingTransport` wraps the real transport to capture it;
+- a note: "Sidetone is only audible while an app uses the mic (for example, with Sound > Recording open)." It uses ASCII `>` so the text survives any console code page.
 
-**Output.** A `MessageBoxW` by default (Ctrl+C copies it). `--diag --console` writes to stdout with no dialog, so scripts and agents can use it.
+**Output.**
+- **Default:** a `MessageBoxW`. Ctrl+C copies its text.
+- **`--diag --console`:** writes to stdout with no dialog, so scripts and agents can use it.
+  - Into a pipe or a file, it writes UTF-8. With no redirection, it attaches to the parent's console.
+  - If there is no console at all, it falls back to the dialog.
+- **From PowerShell:** the exe is a GUI-subsystem app, so PowerShell only waits for it, and sets `$LASTEXITCODE`, when its output is piped:
+  ```
+  .\SidetoneOff.exe --diag --console | Out-Host
+  ```
 
 **Exit code.** 0 when the after-level reads 0, otherwise 1.
 
@@ -355,8 +366,8 @@ windows/
     log.h              OutputDebugString helper ("Sidetone Off: …" lines)
   res/
     app.rc  app.manifest  resource.h
-  tests/               only if M10 = yes
-    tests.cpp          FakeTransport + asserts for hidpp and profile
+  tests/
+    tests.cpp          FakeTransport + checks for hidpp (and profile, from Phase 3)
 ```
 
 **`build.ps1`.**
@@ -369,6 +380,10 @@ windows/
 7. Link: `link /WX /LTCG /SUBSYSTEM:WINDOWS /DEBUG /INCREMENTAL:NO /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% /GUARD:CF /CETCOMPAT /MANIFEST:EMBED /MANIFESTUAC:NO /MANIFESTINPUT:res\app.manifest` with `kernel32 user32 gdi32 shell32 comctl32 advapi32 ole32 uuid hid cfgmgr32`.
    - The PDB stays in `build/`, and the exe points to it by file name only, not by your local path.
    - The manifest is the only source of the UAC level.
+   - **Unit tests (M10)** run before this link:
+     - Compile `tests/tests.cpp` with the same flags.
+     - Link it with the portable objects (`$TestedSources`: `hidpp` now, `profile` from Phase 3) into the console exe `build/SidetoneOffTests.exe`.
+     - Run it. A failure stops the build, so no new `SidetoneOff.exe` is produced.
 8. Check `$LASTEXITCODE` after every tool.
 9. Print the exe size, and fail if it is over 300 KB.
 10. With `-Install`, run `build\SidetoneOff.exe --install`.
@@ -433,17 +448,18 @@ Each phase ends with a clean `/W4 /WX` build, my checks, your review, and **one 
 - `hidpp.*`: `Transport`, `Device`, `GetSidetone` / `SetSidetone`.
 - `hid_windows.*`: `WinHidTransport`.
 - `win32.h`: RAII wrappers. `main.cpp`'s mutex becomes a `UniqueHandle`, which removes its three manual `CloseHandle` calls.
-- `diag.*`, and the `--diag` dispatch in `main.cpp`.
-- If M10 = yes: `tests/` and the test step in `build.ps1`.
+- `diag.*`, and the `--diag` dispatch in `main.cpp`. Any other arguments exit with code 2.
+- `tests/tests.cpp` and the test step in `build.ps1` (M10).
 
 **My checks**
 - `--diag --console` with the G635 plugged in should show Col03 picked, out 20, index 7, after-level 0, and exit code 0.
-- If M10 = yes: the tests pass, and a deliberately broken assert fails the build.
+- `--diag` also works while the tray instance is running.
+- The tests pass, and a deliberately broken check fails the build with no exe left behind.
 
 **You**
 1. Unplug → I run `--diag` → it exits 1 with "G635 not found".
 2. Replug → I run it → before **40**, after **0**.
-3. Run `SidetoneOff.exe --diag` by double-click → MessageBox, and Ctrl+C copies the text.
+3. Run `.\windows\build\SidetoneOff.exe --diag` with no `--console` → MessageBox, and Ctrl+C copies the text. A double-click can't pass the argument.
 
 If anything fails here, it gets fixed before Phase 3 (spec).
 
@@ -452,7 +468,7 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 ### Phase 3: Detection, worker, tray menu
 **Changes**
 - `app.*`: the `App` class, which takes over the window, the window proc and the state machine. `main.cpp` keeps `wWinMain`, the argument dispatch and the mutex.
-- `profile.*`: `Profile` and `Apply()`.
+- `profile.*`: `Profile` and `Apply()`. Unit tests for `Apply`, including a read-back that isn't 0, and `profile` added to `$TestedSources`.
 - `devices.*` (`DeviceWatcher`), `worker.*` (`Worker`), and `tray.*` (`Tray`) with a stock placeholder icon.
 - Resume handling and `TaskbarCreated`.
 - Menu: status line / Set sidetone off again / Quit. Uninstall… comes in Phase 5.
@@ -527,7 +543,7 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 ## 7. Release checklist (run in Phase 6; the phase where each item first appears is in brackets)
 
-1. `build.ps1` from a clean clone → `build\SidetoneOff.exe`, no warnings, < 300 KB. [P1]
+1. `build.ps1` from a clean clone → `build\SidetoneOff.exe`, no warnings, all unit tests pass, < 300 KB. [P1, P2]
 2. `--diag` with the G635 → Col03 / `0xFF43`/`0x0202`, out 20, index 7, after-level 0, exit 0. [P2]
 3. Double-click the exe → confirmation dialog → tray icon. The first-run balloon shows once. The app shows in Installed apps (icon, Publisher) and in Startup apps. [P5]
 4. Plug / unplug → the status and icon change. After plugging in, `--diag` reads 0, and with Recording open there's no sidetone. [P3]

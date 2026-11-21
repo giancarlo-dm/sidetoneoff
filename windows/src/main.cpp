@@ -2,10 +2,16 @@
 // Lives in the system tray and starts at sign-in.
 
 #include <windows.h>
+#include <shellapi.h>
 
+#include <string>
+#include <vector>
+
+#include "diag.h"
 #include "log.h"
 #include "strings.h"
 #include "version.h"
+#include "win32.h"
 
 namespace {
 
@@ -36,24 +42,21 @@ HWND CreateHiddenWindow(HINSTANCE instance) {
                            instance, nullptr);
 }
 
-}  // namespace
-
-int WINAPI wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE, _In_ PWSTR, _In_ int) {
-    HANDLE mutex = CreateMutexW(nullptr, FALSE, ids::kMutex);
+// The tray app (no arguments). For now: the single-instance check, the hidden window and the message loop.
+int RunTray(HINSTANCE instance) {
+    const UniqueHandle mutex{CreateMutexW(nullptr, FALSE, ids::kMutex)};
+    const DWORD mutexError = GetLastError();
     if (!mutex) {
-        Log(L"can't create the single-instance mutex (error %lu)", GetLastError());
+        Log(L"can't create the single-instance mutex (error %lu)", mutexError);
         return 1;
     }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    if (mutexError == ERROR_ALREADY_EXISTS) {
         Log(L"already running, exiting");
-        CloseHandle(mutex);
         return 0;
     }
 
-    HWND window = CreateHiddenWindow(instance);
-    if (!window) {
+    if (!CreateHiddenWindow(instance)) {
         Log(L"can't create the window (error %lu)", GetLastError());
-        CloseHandle(mutex);
         return 1;
     }
     Log(L"started, version %hs", SIDETONE_VERSION_STRING);
@@ -65,6 +68,29 @@ int WINAPI wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE, _In_ PWSTR, _In
     }
 
     Log(L"exiting");
-    CloseHandle(mutex);
     return static_cast<int>(message.wParam);
+}  // the mutex is closed here, on every return path above
+
+// The command-line arguments, without the program name.
+std::vector<std::wstring> Arguments() {
+    int count = 0;
+    wchar_t** list = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!list) return {};
+    std::vector<std::wstring> arguments;
+    for (int i = 1; i < count; ++i) arguments.emplace_back(list[i]);
+    LocalFree(list);
+    return arguments;
+}
+
+}  // namespace
+
+int WINAPI wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE, _In_ PWSTR, _In_ int) {
+    const std::vector<std::wstring> arguments = Arguments();
+    if (arguments.empty()) return RunTray(instance);
+    if (arguments.size() == 1 && arguments[0] == L"--diag") return RunDiag(DiagOutput::Dialog);
+    if (arguments.size() == 2 && arguments[0] == L"--diag" && arguments[1] == L"--console") {
+        return RunDiag(DiagOutput::Console);
+    }
+    Log(L"unknown arguments: %s", GetCommandLineW());
+    return 2;
 }

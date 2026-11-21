@@ -1,6 +1,7 @@
-# Builds windows\build\SidetoneOff.exe with Visual Studio C++ toolset on this PC.
+# Builds windows\build\SidetoneOff.exe with Visual Studio C++ toolset on this PC, and runs the unit tests.
 # Usage (Windows PowerShell 5.1 or PowerShell 7): .\windows\build.ps1
-# Fails fast: any tool error, a toolset older than MSVC 14.52, or an exe over 300 KB stops the build.
+# Fails fast: any tool error, a failing unit test, a toolset older than MSVC 14.52, or an exe over 300 KB
+# stops the build.
 
 [CmdletBinding()]
 param()
@@ -20,6 +21,12 @@ $Obj      = Join-Path $Build 'obj'
 $Exe      = Join-Path $Build 'SidetoneOff.exe'
 $Pdb      = Join-Path $Build 'SidetoneOff.pdb'
 $Manifest = Join-Path $Res 'app.manifest'
+$Tests    = Join-Path $Root 'tests'
+$TestObj  = Join-Path $Build 'obj-tests'
+$TestExe  = Join-Path $Build 'SidetoneOffTests.exe'
+
+# The portable sources the unit tests link against (no Windows code).
+$TestedSources = @('hidpp')
 
 $CompileFlags = @(
     '/nologo', '/std:c++23', '/permissive-', '/utf-8', '/W4', '/WX', '/sdl'
@@ -75,7 +82,7 @@ try {
         try { Remove-Item $Build -Recurse -Force }
         catch { throw "Can't clean $Build. Is SidetoneOff.exe running from it? $($_.Exception.Message)" }
     }
-    New-Item -ItemType Directory -Path $Obj | Out-Null
+    New-Item -ItemType Directory -Path $Obj, $TestObj | Out-Null
 
     Write-Host '==> Resources'
     Invoke-Tool rc /nologo /I $Src /fo (Join-Path $Obj 'app.res') (Join-Path $Res 'app.rc')
@@ -85,6 +92,17 @@ try {
     Push-Location $Obj  # cl writes .obj files to the current directory
     try { Invoke-Tool cl @CompileFlags @sources }
     finally { Pop-Location }
+
+    # Tests run before the app is linked, so a failing test leaves no new SidetoneOff.exe behind.
+    Write-Host '==> Tests'
+    Push-Location $TestObj
+    try { Invoke-Tool cl @CompileFlags /I $Src (Join-Path $Tests 'tests.cpp') }
+    finally { Pop-Location }
+    $testedObjects = @($TestedSources | ForEach-Object { Join-Path $Obj "$_.obj" })
+    Invoke-Tool link /nologo /WX /LTCG /MACHINE:X64 /SUBSYSTEM:CONSOLE /INCREMENTAL:NO /MANIFEST:EMBED `
+        "/OUT:$TestExe" (Join-Path $TestObj 'tests.obj') @testedObjects
+    & $TestExe
+    if ($LASTEXITCODE -ne 0) { throw 'Unit tests failed.' }
 
     Write-Host '==> Link'
     $objects = @(Get-ChildItem $Obj -Filter *.obj | ForEach-Object FullName)

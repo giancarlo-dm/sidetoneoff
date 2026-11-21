@@ -1,5 +1,6 @@
-// Every user-visible string, plus the names other processes rely on, in one place
-// (so the Mac backport and a Linux port can reuse the exact wording).
+// Every string of the tray UI, plus the names other processes rely on, in one place
+// (so the Mac backport and a Linux port can reuse the exact wording). The technical --diag report
+// keeps its own text in diag.cpp.
 #pragma once
 
 namespace ui {
