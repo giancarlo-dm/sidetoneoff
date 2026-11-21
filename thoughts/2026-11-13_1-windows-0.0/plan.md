@@ -1,14 +1,25 @@
 # Sidetone Off — Windows 0.0 — Plan
 
 Written 2026-11-21, after reading `spec.md` and the Mac source (`mac/`), and after probing the real G635 on this PC.
-`spec.md` stays the base. **Where this plan differs, this plan wins**: section 1 has the decisions and section 3 every change from the spec.
+`spec.md` stays the base. **Where this plan differs, this plan wins**: section 1 has the open questions and decisions, and section 3 every change from the spec.
 The work is split into phases (section 6). Each phase is one commit, reviewed and committed by you, the engineer.
 
 ---
 
-## 1. Decisions
+## 1. Open questions and decisions
 
-All open questions are answered (2026-11-21).
+### Open questions
+
+Both are minor blockers: I'll ask again, with this recommendation, before the phase that needs the answer.
+
+| # | Question | Needed by | Recommendation |
+|---|---|---|---|
+| M9 | Release version | Phase 6 | Keep **0.1.0** during development and bump to **1.0.0** in Phase 6 once the release checklist passes, matching the Mac app's 1.0. |
+| M10 | Unit tests with a fake `Transport` (5.0) | Phase 2 | **Yes.** Add `windows/tests/`: one small test exe with plain asserts and no framework. `build.ps1` builds it and runs it on every build, and a failing test fails the build. It covers the request bytes (`11 FF 07 1A 00 …`), response matching, skipping unsolicited reports, HID++ errors, a missing feature, and a read-back that isn't 0, all without the headset. Cost: about 150 lines and roughly 1 s of build time. |
+
+### Decisions
+
+Answered 2026-11-21.
 
 | # | Question | Decision |
 |---|---|---|
@@ -23,6 +34,8 @@ All open questions are answered (2026-11-21).
 | M8 | App icon glyph weight | **Thicken the glyph with a light stroke** so it matches the Mac icon's semibold weight. |
 | T1 | C++ standard | **`/std:c++23`**: the newest *stable* standard. It is complete in MSVC 14.52 (GA 2026-11-10, LTS). C++26 only exists partially under `/std:c++latest`, which changes with each compiler update. Move to C++26 once MSVC ships it stable. |
 | T2 | Toolchain | **VS 2026 Build Tools 18.12 (MSVC 14.52)**, installed 2026-11-21 with `winget install --id Microsoft.VisualStudio.BuildTools` (VCTools workload + recommended, which brings the newest Windows SDK). **VS 2019 Build Tools is removed** once the new toolchain is validated (Phase 0). |
+| A1 | Code structure, with RGB and other features in mind | **Hybrid** (decided after Phase 1). Classes for what owns a resource or keeps state, free functions for operations. One interface, `Transport`, because there really are several implementations (Windows now; Linux, Mac and tests later). No inheritance hierarchies. Errors are `std::expected` values, not exceptions. See 5.0. |
+| L1 | Conversation language | **English** from 2026-11-21, at your request. This overrides the spec's pt-BR. Windows UI paths stay in their English names. |
 
 Decisions made earlier in the conversation (installer, detection, read-back, Quit…) are in section 3.
 
@@ -43,6 +56,11 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 - Hardware steps are yours: plugging and unplugging, listening, sleep, taskbar settings. I say exactly what to do and what you should see.
 - If a phase finds something that changes the plan, I stop and ask. The plan.md update goes into that phase's commit.
 
+**Code for the reviewer.** You know Java, TypeScript and some C, not C++. So:
+- The code stays plain modern C++: no template metaprogramming, no operator overloading of our own, no clever tricks.
+- A C++ idiom gets a one-line comment where it first appears.
+- Each phase report has a short **C++ notes** part that maps the idioms new in that phase to Java/TS. The glossary in 5.0 covers the common ones.
+
 ---
 
 ## 3. Changes vs spec
@@ -60,6 +78,7 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 | 9 | `--diag` | Lists, sends, reports bytes | Also HID++ version, firmware, feature index, **level before and after** | The read-back answers "is it off?" with no need to listen. |
 | 10 | Version info | — | `VERSIONINFO` resource with `FileDescription` "Sidetone Off" | The Win11 toast (balloon) and Startup apps take the name from it. |
 | 11 | Commits | — | You commit by hand; I provide title and description (M1). | Your rule. |
+| 12 | Conversation language | pt-BR | **English** (L1) | Your request. |
 
 UI strings follow `spec.md`. They differ from the Mac's on purpose.
 
@@ -112,31 +131,102 @@ HID: \\?\HID#VID_046D&PID_0A89&MI_03&Col01#…  UsagePage 0x000C Usage 0x0001  i
 
 ## 5. Design
 
+### 5.0 Code structure (A1)
+
+**Rule.**
+- Make it a **class** when it owns a resource (a handle, a thread, a registration) or keeps state that has rules.
+- Make it a **free function** when it is an operation.
+- Use **`virtual`** only where several implementations really exist. Today that is only `Transport`.
+- **No inheritance hierarchies.**
+  - Headset models (G635, G935, G733…) are a PID table, not classes. HID++ 2.0 reports its features at runtime, so no model needs code of its own.
+  - Headset features (sidetone, RGB, EQ) are functions, not an `IFeature` hierarchy.
+
+**Where change is expected, and what absorbs it**
+
+| Changes | Example | Absorbed by |
+|---|---|---|
+| Headset feature | sidetone → RGB → EQ | A new free function on `Device&`, plus a field in `Profile` |
+| Platform | Windows → Linux (hidraw) → Mac (IOKit) | A new class implementing `Transport` |
+| Headset model | G635 → G935, G733… | A row in the PID table |
+| Win32 resources | `HANDLE`, `HKEY`, `HICON`, `HDEVNOTIFY` | RAII wrappers (`win32.h`) |
+| App state | window, tray, connection state | The `App` class |
+
+**Main types**
+
+| Type | Kind | Owns / does | File | Phase |
+|---|---|---|---|---|
+| `hidpp::Transport` | interface | Writes one report, and reads one report with a deadline | `hidpp.h` | 2 |
+| `hidpp::Device` | class | Builds requests, matches responses, skips unsolicited reports, caches feature indexes | `hidpp.*` | 2 |
+| `hidpp::GetSidetone`, `SetSidetone` (later `SetLeds`, EQ) | free functions on `Device&` | One HID++ call each | `hidpp.*` | 2 |
+| `WinHidTransport` | class implementing `Transport` | Finds and opens the G635's HID++ collection and does the overlapped I/O. Closes its handle when destroyed. | `hid_windows.*` | 2 |
+| `UniqueHandle`, `UniqueHkey`, … | RAII wrappers | Close Win32 handles automatically | `win32.h` | 2 |
+| `Profile` + `Apply()` | struct + free function | What to apply on each connection. In this version that is `sidetone = 0`. | `profile.*` | 3 |
+| `Worker` | class | The thread, the `wake` and `stop` events, and the retries | `worker.*` | 3 |
+| `DeviceWatcher` | class | The two device-notification registrations and the connected count | `devices.*` | 3 |
+| `Tray` | class | The tray icon, menu and balloon | `tray.*` | 3, 4 |
+| `App` | class | The hidden window, its window proc and the state machine. Owns `Worker`, `DeviceWatcher` and `Tray`. | `app.*` | 3 |
+| `RunDiag`, install / uninstall | free functions | Nothing long-lived to own | `diag.*`, `install.*` | 2, 5 |
+
+**Errors.**
+- Device and Windows failures are values, not exceptions: anything that can fail returns `std::expected<T, Error>`.
+- A constructor can't return a value, so a type that can fail to open uses a static factory instead: `static std::expected<WinHidTransport, Error> Open()`.
+
+**C++ for a Java / TypeScript reader**
+
+| C++ | Closest Java / TypeScript |
+|---|---|
+| A class with only pure `virtual` functions (`Transport`) | `interface` |
+| `std::expected<T, Error>` | A `Result<T, E>`, or in TS `{ ok: true, value } \| { ok: false, error }`. Test it with `if (!result)`, then read `*result` or `result.error()`. |
+| `std::optional<T>` | `Optional<T>` / `T \| undefined` |
+| RAII: a destructor releases what the object owns | try-with-resources / TS `using`, but it happens at the end of *every* scope, with no keyword |
+| `std::unique_ptr<T>` | The one owner of a heap object; freed when the owner goes away (there is no GC) |
+| `T&` (reference) | A non-null object reference that can't be pointed elsewhere |
+| `std::span<const std::uint8_t>` | A read-only view over bytes, like a `Uint8Array.subarray()`; no copy |
+| `std::jthread` | A `Thread` that is joined automatically when destroyed |
+| `namespace hidpp` | A Java package / TS module |
+| `.h` / `.cpp` | Declarations / implementation, as in C |
+
+**How RGB lands in the next version (M7).**
+- A field in `Profile`.
+- `SetLeds(Device&, …)` in `hidpp`.
+- A submenu in `Tray`.
+- The chosen colors saved under `HKCU\Software\SidetoneOff`.
+
+The worker, detection, retries and transport stay as they are.
+
 ### 5.1 HID++ layer
-- **`hidpp.h`** is portable (no Windows headers): constants, the 20-byte long-request builder, and parsing of responses and errors. It gets reused for RGB, EQ and Linux.
-- **`hid_windows.cpp`** is the Win32 transport.
+- **`hidpp.h/.cpp`** are portable: no Windows headers, everything in `namespace hidpp`. They hold `Report` (20 bytes), `Error`, the `Transport` interface, the `Device` class and the feature functions. They get reused for RGB, EQ, Linux and the Mac backport.
+- **`hid_windows.h/.cpp`** hold `WinHidTransport`, the Win32 implementation of `Transport`.
 
 **Request format.** `[0x11, 0xFF, featureIndex, (function << 4) | 0x0A, params…]`, zero-filled to `OutputReportByteLength`. Software ID `0x0A` makes the set packet byte-identical to the spec's `11 FF 07 1A 00`.
 
-**Responses.**
+**Responses.** `Device::Call` handles these:
 - A match has byte 2 = feature index and byte 3 = function/software ID.
 - A HID++ error looks like `[0x11, 0xFF, 0xFF, featureIndex, fnSw, errorCode]`.
 - Unsolicited reports are skipped.
 
-**One transfer.**
-1. Overlapped `WriteFile` with a 1 s timeout, and `CancelIoEx` on timeout.
-2. Overlapped `ReadFile` loop until the matching response arrives or a 1 s deadline passes.
-3. `HidD_FlushQueue` once after opening.
+**`Device`.**
+- **`Call(featureId, function, params)`** looks up the feature index, writes the request through the `Transport`, and reads until the matching response arrives or a 1 s deadline passes.
+- **The feature index** comes from `IRoot.getFeature`. A `Device` lives for one attempt, so the index is asked once per attempt (spec change #4) and cached for the rest of that attempt. A result of 0 means the headset lacks the feature, and the call fails.
 
-**One attempt.** All handles are closed at the end.
-1. `HidD_GetHidGuid` + `CM_Get_Device_Interface_List`, keeping paths that contain `vid_046d&pid_0a89`.
-2. Open each with access 0 and call `HidP_GetCaps`. Pick UsagePage `0xFF43` / Usage `0x0202`.
-3. Reopen it `GENERIC_READ|GENERIC_WRITE` with `FILE_FLAG_OVERLAPPED`. Fail if the in or out report length is below 5.
-4. `IRoot.getFeature(0x8300)` → index. Fail if it returns 0.
-5. `Sidetone.setLevel(0)`.
-6. `Sidetone.getLevel()`. **The attempt succeeds only if it returns 0.** A timeout or a non-zero value is a failure (M2).
+**`WinHidTransport`.**
+- **`Open()`**, a static factory:
+  1. `HidD_GetHidGuid` + `CM_Get_Device_Interface_List`, keeping the paths that contain `vid_046d&pid_0a89`.
+  2. Open each path with access 0 and call `HidP_GetCaps`. Pick UsagePage `0xFF43` / Usage `0x0202`.
+  3. Reopen it with `GENERIC_READ|GENERIC_WRITE` and `FILE_FLAG_OVERLAPPED`. Fail if the in or out report length is below 5.
+  4. `HidD_FlushQueue`.
+- **`Write`:** overlapped `WriteFile` with a 1 s timeout, and `CancelIoEx` on timeout.
+- **`Read`:** overlapped `ReadFile` until the deadline.
+- **Its handle is closed** when the object goes out of scope (RAII), so every attempt closes everything, even on an error path.
 
-**Result type.** An attempt returns `std::expected<std::uint8_t, Error>` (C++23): either the level read, or an `Error` with the step, the `GetLastError` value and any HID++ error code. `--diag` and the log print the `Error` as is.
+**One attempt.**
+1. `WinHidTransport::Open()`.
+2. `hidpp::Device device{transport}`.
+3. `Apply(device, profile)`. For sidetone: `SetSidetone(device, 0)`, then `GetSidetone(device)`. **The attempt succeeds only if the read-back is 0.** A timeout or a non-zero value is a failure (M2).
+
+In Phase 2, `--diag` calls `GetSidetone` / `SetSidetone` / `GetSidetone` directly. `Profile` and `Apply` come in Phase 3.
+
+**Result type.** Every fallible step returns `std::expected<T, Error>` (C++23): the value, or an `Error` with the step, the OS error code (`GetLastError` on Windows) and any HID++ error code. `--diag` and the log print the `Error` as is.
 
 **Retries.** Up to 5 attempts, with every failure retried.
 
@@ -144,9 +234,11 @@ HID: \\?\HID#VID_046D&PID_0A89&MI_03&Col01#…  UsagePage 0x000C Usage 0x0001  i
 
 ### 5.2 Detection, worker, state
 
-**Window.** A hidden top-level window with class `SidetoneOff.Window`. Install and uninstall find the running instance by this class.
+**Ownership (A1).** `App` owns the hidden window and the state, plus a `DeviceWatcher`, a `Worker` and a `Tray`. Destroying `App` unregisters the notifications, stops the worker and removes the tray icon, in that order.
 
-**Device notifications.** `RegisterDeviceNotification` twice: for `GUID_DEVINTERFACE_USB_DEVICE` and for the HID GUID.
+**Window.** A hidden top-level window with class `SidetoneOff.Window`. Install and uninstall find the running instance by this class. Its window proc forwards each message to an `App` member function (the pointer is stored with `SetWindowLongPtrW(GWLP_USERDATA)`).
+
+**Device notifications.** `DeviceWatcher` calls `RegisterDeviceNotification` twice: for `GUID_DEVINTERFACE_USB_DEVICE` and for the HID GUID.
 
 **Triggers.**
 - **USB arrival/removal** matching `VID_046D&PID_0A89` (case-insensitive) updates `connectedCount`. This is the only source of the connected/disconnected state.
@@ -156,16 +248,18 @@ HID: \\?\HID#VID_046D&PID_0A89&MI_03&Col01#…  UsagePage 0x000C Usage 0x0001  i
 - **Resume** (`PBT_APMRESUMEAUTOMATIC`) while connected: `applying` and `RequestSend()`.
 - **"Set sidetone off again":** `applying` and `RequestSend()`.
 
-**Worker.** One thread and one auto-reset event, `wake`:
+**Worker.** The `Worker` class owns one thread (`std::jthread`), an auto-reset event `wake`, and a manual-reset event `stop`:
 ```
 loop:
-  wait(wake, INFINITE)
+  wait(stop | wake, INFINITE)
   for attempt in 1..5:
-      wait(wake, 1000)        // the Mac's 1 s wait; a HID arrival (or any new request) cuts it short
-      if attempt succeeds: break
+      wait(stop | wake, 1000) // the Mac's 1 s wait; a HID arrival (or any new request) cuts it short
+      if Apply(profile) on a freshly opened WinHidTransport succeeds: break
   PostMessage(hwnd, WM_APP_RESULT, ok)
 ```
-A request that arrives during an attempt leaves `wake` signaled, so one extra run follows. That is harmless.
+- A request that arrives during an attempt leaves `wake` signaled, so one extra run follows. That is harmless.
+- `stop` ends the loop at any wait. The `Worker` destructor sets it, and the `jthread` joins.
+- In this version the profile is fixed: `Profile{ .sidetone = 0 }`.
 
 **Result.** On `WM_APP_RESULT`: if `connectedCount == 0`, ignore it (Mac guard). Otherwise the state becomes `sidetoneOff` or `failed`.
 
@@ -245,18 +339,24 @@ windows/
   make-icon.ps1        build/app.ico via System.Drawing
   README.md
   src/
-    main.cpp           wWinMain, arg dispatch, mutex, window proc, state
-    hidpp.h            portable HID++ 2.0 helpers (no Windows headers)
-    hid_windows.cpp/.h find collection, transfer, attempt
-    worker.cpp/.h      worker thread, coalescing, retries
-    devices.cpp/.h     notifications, enumeration, counting
-    tray.cpp/.h        icon rendering, tray, menu, balloon
-    install.cpp/.h     install / update / uninstall
-    diag.cpp/.h        --diag
+    main.cpp           wWinMain, arg dispatch, mutex
+    app.cpp/.h         App: hidden window, window proc, state machine
+    hidpp.cpp/.h       portable HID++ 2.0: Transport interface, Device, feature functions
+    profile.cpp/.h     portable: Profile (what to apply on connect) and Apply()
+    hid_windows.cpp/.h WinHidTransport: find the G635 collection, overlapped I/O
+    win32.h            RAII wrappers for Win32 handles
+    worker.cpp/.h      Worker: thread, coalescing, retries
+    devices.cpp/.h     DeviceWatcher: notifications, enumeration, counting
+    tray.cpp/.h        Tray: icon rendering, menu, balloon
+    install.cpp/.h     install / update / uninstall (free functions)
+    diag.cpp/.h        --diag (free function)
     strings.h          every UI string in one place (backport / Linux)
     version.h          the single version number (code + rc)
+    log.h              OutputDebugString helper ("Sidetone Off: …" lines)
   res/
     app.rc  app.manifest  resource.h
+  tests/               only if M10 = yes
+    tests.cpp          FakeTransport + asserts for hidpp and profile
 ```
 
 **`build.ps1`.**
@@ -265,11 +365,15 @@ windows/
 3. `Enter-VsDevShell -arch=x64`.
 4. Run `make-icon.ps1`, then `rc`.
 5. Fail fast if `$env:VCToolsVersion` is below **14.52**, the first MSVC with stable `/std:c++23`.
-6. Compile: `cl /std:c++23 /W4 /WX /permissive- /MT /O1 /GL /EHsc /DUNICODE /D_UNICODE`.
-7. Link: `link /LTCG /SUBSYSTEM:WINDOWS /MANIFEST:EMBED /MANIFESTINPUT:res\app.manifest` with `hid cfgmgr32 user32 gdi32 shell32 comctl32 advapi32 ole32 uuid`.
+6. Compile: `cl /std:c++23 /permissive- /utf-8 /W4 /WX /sdl /MT /O1 /GL /Zi /EHsc /guard:cf`, with `UNICODE`, `WIN32_LEAN_AND_MEAN`, `NOMINMAX` and `_WIN32_WINNT=0x0A00` defined. `/utf-8` keeps the "—" in the status strings intact.
+7. Link: `link /WX /LTCG /SUBSYSTEM:WINDOWS /DEBUG /INCREMENTAL:NO /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% /GUARD:CF /CETCOMPAT /MANIFEST:EMBED /MANIFESTUAC:NO /MANIFESTINPUT:res\app.manifest` with `kernel32 user32 gdi32 shell32 comctl32 advapi32 ole32 uuid hid cfgmgr32`.
+   - The PDB stays in `build/`, and the exe points to it by file name only, not by your local path.
+   - The manifest is the only source of the UAC level.
 8. Check `$LASTEXITCODE` after every tool.
 9. Print the exe size, and fail if it is over 300 KB.
 10. With `-Install`, run `build\SidetoneOff.exe --install`.
+
+Every build starts from an empty `build/`. If the exe is running from it, the build stops with a clear message. When it finishes, the script restores the caller's environment, because `Enter-VsDevShell` changes it and repeated runs in the same terminal would otherwise pile up.
 
 Output goes to `windows/build/`, which git ignores.
 
@@ -307,8 +411,10 @@ Each phase ends with a clean `/W4 /WX` build, my checks, your review, and **one 
 - `version.h` and `strings.h`.
 - `res/app.rc` with `VERSIONINFO`.
 - `res/app.manifest`: asInvoker, PerMonitorV2, Common Controls v6, supportedOS Win10/11.
-- `main.cpp`: mutex `Local\SidetoneOff.SingleInstance`, the hidden window, the message loop, `WM_CLOSE` → exit.
+- `main.cpp`: mutex `Local\SidetoneOff.SingleInstance`, the hidden window, the message loop, `WM_CLOSE` → exit. Plain functions for now; they move into the `App` class in Phase 3, when state appears.
+- `log.h`.
 - No tray and no icon yet.
+- Plan: code structure (A1), English (L1), the reviewer notes (section 2), and open questions M9 and M10. All of these were decided after the skeleton was built.
 
 **My checks**
 - A build from a clean `build/` has 0 warnings, and the size is printed.
@@ -323,9 +429,16 @@ Each phase ends with a clean `/W4 /WX` build, my checks, your review, and **one 
 **Commit title.** `Phase 1: Add Windows build script and app skeleton`
 
 ### Phase 2: HID++ and `--diag`
-**Changes.** `hidpp.h`, `hid_windows.*`, `diag.*`, and the `--diag` dispatch in `main.cpp`.
+**Changes**
+- `hidpp.*`: `Transport`, `Device`, `GetSidetone` / `SetSidetone`.
+- `hid_windows.*`: `WinHidTransport`.
+- `win32.h`: RAII wrappers. `main.cpp`'s mutex becomes a `UniqueHandle`, which removes its three manual `CloseHandle` calls.
+- `diag.*`, and the `--diag` dispatch in `main.cpp`.
+- If M10 = yes: `tests/` and the test step in `build.ps1`.
 
-**My checks.** `--diag --console` with the G635 plugged in should show Col03 picked, out 20, index 7, after-level 0, and exit code 0.
+**My checks**
+- `--diag --console` with the G635 plugged in should show Col03 picked, out 20, index 7, after-level 0, and exit code 0.
+- If M10 = yes: the tests pass, and a deliberately broken assert fails the build.
 
 **You**
 1. Unplug → I run `--diag` → it exits 1 with "G635 not found".
@@ -338,8 +451,9 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 ### Phase 3: Detection, worker, tray menu
 **Changes**
-- `devices.*`, `worker.*`, and `tray.*` with a stock placeholder icon.
-- The state machine in `main.cpp`.
+- `app.*`: the `App` class, which takes over the window, the window proc and the state machine. `main.cpp` keeps `wWinMain`, the argument dispatch and the mutex.
+- `profile.*`: `Profile` and `Apply()`.
+- `devices.*` (`DeviceWatcher`), `worker.*` (`Worker`), and `tray.*` (`Tray`) with a stock placeholder icon.
 - Resume handling and `TaskbarCreated`.
 - Menu: status line / Set sidetone off again / Quit. Uninstall… comes in Phase 5.
 
@@ -431,12 +545,16 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 ## 8. Future (next versions)
 
-- **RGB** via `0x8070` ColorLEDEffects. Not in this version (M7); it's the next one. The G635 lists the feature, and HeadsetControl already drives its two zones, logo and side strips. It is probably volatile too, so the same re-apply-on-connect path would cover it. The UI would be a submenu of presets plus `ChooseColorW`.
+- **RGB** via `0x8070` ColorLEDEffects. Not in this version (M7); it's the next one.
+  - The G635 lists the feature, and HeadsetControl already drives its two zones, logo and side strips.
+  - It is probably volatile too, so the same re-apply-on-connect path would cover it.
+  - The UI would be a submenu of presets plus `ChooseColorW`.
+  - With A1 it lands as a `Profile` field, `SetLeds()` and a `Tray` submenu (5.0).
 - **Equalizer** via `0x8310`.
 - **Other headsets in the family:** G633 `0A5C`, G933 `0A5B`, G935 `0A87`, G733 `0AB5`/`0AFE`/`0B1F`. HeadsetControl uses the same protocol for all of them; it's a PID table, but untested here.
 - **Backport to Mac:**
-  - native HID (IOKit `IOHIDDevice`) instead of `headsetcontrol`;
+  - native HID (IOKit `IOHIDDevice`) instead of `headsetcontrol`. The same `Transport` / `Device` shape maps to a Swift protocol and a class;
   - read-back;
   - resume trigger;
   - HID-arrival trigger.
-- **Linux:** reuse `hidpp.h`, with `hidraw` + udev monitor for the transport, StatusNotifierItem for the tray, and its own glyph (the Segoe glyph is Windows-only).
+- **Linux:** reuse `hidpp.*` and `profile.*`, with a `HidrawTransport` (`hidraw` + udev monitor), StatusNotifierItem for the tray, and its own glyph (the Segoe glyph is Windows-only).

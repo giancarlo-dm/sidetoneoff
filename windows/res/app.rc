@@ -1,0 +1,34 @@
+// Version info: Task Manager, Startup apps and the Windows 11 toast show the app by these names.
+#pragma code_page(65001)
+
+#include <winresrc.h>
+
+#include "version.h"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    SIDETONE_VERSION_MAJOR, SIDETONE_VERSION_MINOR, SIDETONE_VERSION_PATCH, 0
+ PRODUCTVERSION SIDETONE_VERSION_MAJOR, SIDETONE_VERSION_MINOR, SIDETONE_VERSION_PATCH, 0
+ FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+ FILEFLAGS      0
+ FILEOS         VOS_NT_WINDOWS32
+ FILETYPE       VFT_APP
+ FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "Giancarlo Dalle Mole"
+            VALUE "FileDescription",  "Sidetone Off"
+            VALUE "FileVersion",      SIDETONE_VERSION_STRING
+            VALUE "InternalName",     "SidetoneOff"
+            VALUE "OriginalFilename", "SidetoneOff.exe"
+            VALUE "ProductName",      "Sidetone Off"
+            VALUE "ProductVersion",   SIDETONE_VERSION_STRING
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
