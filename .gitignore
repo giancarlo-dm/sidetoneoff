@@ -1,0 +1,7 @@
+# Build output
+windows/build/
+mac/build/
+
+# OS / editor noise
+.DS_Store
+.vs/

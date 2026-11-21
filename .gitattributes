@@ -1,0 +1,10 @@
+# Normalize text files to LF in the repository.
+* text=auto
+
+# Scripts and sources the Mac toolchain runs: always LF.
+*.sh    text eol=lf
+*.swift text eol=lf
+
+# Binary assets.
+*.png binary
+*.ico binary
