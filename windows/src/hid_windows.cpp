@@ -18,15 +18,6 @@ using hidpp::Step;
 
 constexpr DWORD kWriteTimeoutMs = 1000;
 
-// Device-interface paths contain "VID_046D&PID_0A89" (in either case).
-bool IsG635Path(std::wstring path) {
-    wchar_t match[32];
-    swprintf_s(match, L"vid_%04x&pid_%04x", static_cast<unsigned>(hidpp::kLogitechVendorId),
-               static_cast<unsigned>(hidpp::kG635ProductId));
-    for (wchar_t& c : path) c = static_cast<wchar_t>(std::towlower(c));
-    return path.contains(match);
-}
-
 // The milliseconds left until `deadline`, 0 if it has passed.
 DWORD MillisecondsUntil(std::chrono::steady_clock::time_point deadline) {
     const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
@@ -55,6 +46,15 @@ UniqueHandle NewEvent() {
 }
 
 }  // namespace
+
+bool IsG635Path(std::wstring_view path) {
+    wchar_t match[32];
+    swprintf_s(match, L"vid_%04x&pid_%04x", static_cast<unsigned>(hidpp::kLogitechVendorId),
+               static_cast<unsigned>(hidpp::kG635ProductId));
+    std::wstring lower(path);
+    for (wchar_t& c : lower) c = static_cast<wchar_t>(std::towlower(c));
+    return lower.contains(match);
+}
 
 std::expected<std::vector<std::wstring>, Error> FindG635Interfaces(const GUID& interfaceClass) {
     GUID guid = interfaceClass;  // the CM_ functions take a non-const pointer

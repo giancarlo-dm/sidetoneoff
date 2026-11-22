@@ -31,6 +31,7 @@ const char* StepText(Step step) {
     case Step::Timeout: return "no answer from the headset within 1 s";
     case Step::HidppError: return "the headset returned HID++ error";
     case Step::NoFeature: return "the headset doesn't have this feature";
+    case Step::Verify: return "the headset reads back";
     }
     return "unknown error";
 }
@@ -64,6 +65,10 @@ std::string Describe(const Error& error) {
     char detail[64];
     if (error.step == Step::HidppError) {
         std::snprintf(detail, sizeof detail, " 0x%02X %s", error.hidppError, HidppErrorName(error.hidppError));
+        text += detail;
+    }
+    if (error.step == Step::Verify) {
+        std::snprintf(detail, sizeof detail, " %u", static_cast<unsigned>(error.readBack));
         text += detail;
     }
     if (error.featureId != 0) {

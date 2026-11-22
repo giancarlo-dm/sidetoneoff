@@ -1,5 +1,5 @@
-// Unit tests for the portable HID++ layer, run by build.ps1 on every build. A FakeTransport stands in for
-// the headset, so no hardware is needed. No framework: each test is a function, CHECK records failures.
+// Unit tests for the portable code (hidpp, profile), run by build.ps1 on every build. A FakeTransport stands
+// in for the headset, so no hardware is needed. No framework: each test is a function, CHECK records failures.
 
 #include <cstdio>
 #include <deque>
@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "hidpp.h"
+#include "profile.h"
 
 namespace {
 
@@ -179,6 +180,59 @@ void ErrorsDescribeThemselves() {
           "the headset returned HID++ error 0x03 OutOfRange (feature 0x8300)");
     CHECK(hidpp::Describe(Error{.step = Step::Write, .osError = 1167, .featureId = 0x8300}) ==
           "couldn't send to the headset (feature 0x8300) (OS error 1167)");
+    CHECK(hidpp::Describe(Error{.step = Step::Verify, .featureId = 0x8300, .readBack = 40}) ==
+          "the headset reads back 40 (feature 0x8300)");
+}
+
+// --- profile ---------------------------------------------------------------------------------------
+
+void ApplySetsThenReadsBack() {
+    FakeTransport transport;
+    transport.answers = {kSidetoneAt7, Bytes({0x11, 0xFF, 0x07, 0x1A}), Bytes({0x11, 0xFF, 0x07, 0x0A, 0})};
+    hidpp::Device device{transport};
+
+    CHECK(Apply(device, Profile{.sidetone = std::uint8_t{0}}));
+    CHECK(transport.written.size() == 3);  // getFeature, set 0, get
+    CHECK(transport.written.size() == 3 && transport.written[1] == Bytes({0x11, 0xFF, 0x07, 0x1A, 0x00}));
+    CHECK(transport.written.size() == 3 && transport.written[2] == Bytes({0x11, 0xFF, 0x07, 0x0A}));
+}
+
+void ApplyFailsWhenTheReadBackDiffers() {
+    FakeTransport transport;
+    transport.answers = {kSidetoneAt7, Bytes({0x11, 0xFF, 0x07, 0x1A}), Bytes({0x11, 0xFF, 0x07, 0x0A, 40})};
+    hidpp::Device device{transport};
+
+    const auto result = Apply(device, Profile{.sidetone = std::uint8_t{0}});
+    CHECK(!result && result.error().step == Step::Verify);
+    CHECK(!result && result.error().readBack == 40);
+    CHECK(!result && result.error().featureId == hidpp::kSidetone);
+}
+
+void ApplyFailsWhenTheReadBackTimesOut() {  // decision M2
+    FakeTransport transport;
+    transport.answers = {kSidetoneAt7, Bytes({0x11, 0xFF, 0x07, 0x1A})};  // the get gets no answer
+    hidpp::Device device{transport};
+
+    const auto result = Apply(device, Profile{.sidetone = std::uint8_t{0}});
+    CHECK(!result && result.error().step == Step::Timeout);
+}
+
+void ApplyStopsWhenTheSetFails() {
+    FakeTransport transport;
+    transport.answers = {kSidetoneAt7, Bytes({0x11, 0xFF, 0xFF, 0x07, 0x1A, 0x04})};  // HardwareError
+    hidpp::Device device{transport};
+
+    const auto result = Apply(device, Profile{.sidetone = std::uint8_t{0}});
+    CHECK(!result && result.error().step == Step::HidppError);
+    CHECK(transport.written.size() == 2);  // no get after the failed set
+}
+
+void EmptyProfileSendsNothing() {
+    FakeTransport transport;
+    hidpp::Device device{transport};
+
+    CHECK(Apply(device, Profile{.sidetone = std::nullopt}));
+    CHECK(transport.written.empty());
 }
 
 struct Test {
@@ -198,6 +252,11 @@ const Test kTests[] = {
     {"RootNeedsNoLookup", RootNeedsNoLookup},
     {"FirmwareVersionIsFormatted", FirmwareVersionIsFormatted},
     {"ErrorsDescribeThemselves", ErrorsDescribeThemselves},
+    {"ApplySetsThenReadsBack", ApplySetsThenReadsBack},
+    {"ApplyFailsWhenTheReadBackDiffers", ApplyFailsWhenTheReadBackDiffers},
+    {"ApplyFailsWhenTheReadBackTimesOut", ApplyFailsWhenTheReadBackTimesOut},
+    {"ApplyStopsWhenTheSetFails", ApplyStopsWhenTheSetFails},
+    {"EmptyProfileSendsNothing", EmptyProfileSendsNothing},
 };
 
 }  // namespace

@@ -79,6 +79,8 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 | 10 | Version info | — | `VERSIONINFO` resource with `FileDescription` "Sidetone Off" | The Win11 toast (balloon) and Startup apps take the name from it. |
 | 11 | Commits | — | You commit by hand; I provide title and description (M1). | Your rule. |
 | 12 | Conversation language | pt-BR | **English** (L1) | Your request. |
+| 13 | Connected state | `connectedCount` counter, as on the Mac | Re-read from the system on each G635 removal (5.2) | A counter can drift if a notification is missed. |
+| 14 | Open menu | — | **Updates live**: it reopens in place when the state changes (5.4) | Found in the Phase 3 review: an unplug while the menu was open left it stale. The Mac menu updates live. |
 
 UI strings follow `spec.md`. They differ from the Mac's on purpose.
 
@@ -242,12 +244,18 @@ In Phase 2, `--diag` calls `GetSidetone` / `SetSidetone` / `GetSidetone` directl
 **Device notifications.** `DeviceWatcher` calls `RegisterDeviceNotification` twice: for `GUID_DEVINTERFACE_USB_DEVICE` and for the HID GUID.
 
 **Triggers.**
-- **USB arrival/removal** matching `VID_046D&PID_0A89` (case-insensitive) updates `connectedCount`. This is the only source of the connected/disconnected state.
-- **USB arrival:** state `applying`, then `RequestSend()`.
-- **HID arrival** matching the VID/PID: `RequestSend()`. All 3 collections fire, and coalescing merges them.
-- **Startup:** count the present USB interfaces. If there are any, `applying` and `RequestSend()`.
-- **Resume** (`PBT_APMRESUMEAUTOMATIC`) while connected: `applying` and `RequestSend()`.
-- **"Set sidetone off again":** `applying` and `RequestSend()`.
+- **Connected state.** USB arrival/removal matching `VID_046D&PID_0A89` (case-insensitive) is the only source of the connected/disconnected state.
+  - An arrival sets it.
+  - A removal re-reads it from the system: is any G635 USB device still present? This replaces the Mac's +1/−1 counter, so the state can't drift if a notification is missed.
+- **USB arrival:** state `applying`, then `RequestApply()`.
+- **HID arrival** matching the VID/PID:
+  - `RequestApply()`. All 3 collections fire, and coalescing merges them.
+  - If the last run failed, the state goes back to `applying`. A first plug-in can outlast the 5 attempts while Windows installs the driver; the HID arrival then starts a fresh run.
+- **Startup:** check the present USB interfaces (register first, then check). If there are any, `applying` and `RequestApply()`.
+- **Resume** (`PBT_APMRESUMEAUTOMATIC`) while connected: `applying` and `RequestApply()`.
+- **"Set sidetone off again":** `applying` and `RequestApply()`.
+
+**Closing while the menu is open.** The menu runs inside `Tray::PopUpMenu`, further up the call stack, so `WM_CLOSE` (taskkill, install, uninstall) can't destroy the window right then. It closes the menu (`EndMenu`) and posts itself again.
 
 **Worker.** The `Worker` class owns one thread (`std::jthread`), an auto-reset event `wake`, and a manual-reset event `stop`:
 ```
@@ -312,6 +320,10 @@ States, menu, tooltip and icon dimming follow the spec's table.
 ### 5.4 Tray, icon, first run
 As in the spec, with these specifics:
 - **Tray icon:** `Shell_NotifyIconW` with `NOTIFYICON_VERSION_4`, identified by `uID`, not `NIF_GUID` (which ties the icon to the exe path). Re-added on `TaskbarCreated`.
+  - After an Explorer restart it comes back wherever Windows keeps it: the ^ overflow until you pin it.
+  - Phase 3 uses the stock `IDI_APPLICATION` icon as a placeholder.
+- **Menu:** the same menu on a left click (`NIN_SELECT`), a right click (`WM_CONTEXTMENU`) and the keyboard (`NIN_KEYSELECT`). It is built from the current state each time it opens.
+  - **Live, like the Mac menu.** If the state changes while the menu is open, it closes and reopens in place with the new state. An open Win32 menu can't be resized, and the status line changes length.
 - **Glyph:** Segoe Fluent Icons `U+E7F6`, with Segoe MDL2 as fallback.
   - Rendered into a 32-bpp premultiplied `HICON` at the taskbar's DPI.
   - Color follows `SystemUsesLightTheme`; disconnected shows it at ~40% opacity.
@@ -471,18 +483,24 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 - `profile.*`: `Profile` and `Apply()`. Unit tests for `Apply`, including a read-back that isn't 0, and `profile` added to `$TestedSources`.
 - `devices.*` (`DeviceWatcher`), `worker.*` (`Worker`), and `tray.*` (`Tray`) with a stock placeholder icon.
 - Resume handling and `TaskbarCreated`.
-- Menu: status line / Set sidetone off again / Quit. Uninstall… comes in Phase 5.
+- Menu: status line / Set sidetone off again / Quit. Uninstall… comes in Phase 5. The menu updates live while open (5.4).
+- `WM_CLOSE` while the menu is open is deferred until the menu has closed (5.2).
 
 **My checks**
 - Capture the app's `OutputDebugString` lines with a scratch listener.
 - With the headset connected at startup, the log shows the send and the read-back of 0, and `--diag --console` confirms 0.
+- Post `TaskbarCreated` and a resume to the window → the icon is re-added, and sidetone is applied again.
+- Open the menu by posting the tray callback, change the state while it's open, and screenshot it → the menu reopens with the new state.
+- `WM_CLOSE` while the menu is open → clean exit.
+- Idle memory and CPU.
 
 **You**
 1. Unplug and replug, with Sound › Recording open. The status should go disconnected → applying → sidetone off, and the sidetone should be gone within about 2 s.
 2. Use "Set sidetone off again".
 3. Use Quit.
-4. Run `taskkill /f /im explorer.exe; start explorer` → the icon comes back.
+4. Run `taskkill /f /im explorer.exe; start explorer` → the icon comes back (look in the ^ overflow too).
 5. Sleep and resume → sidetone off.
+6. With the menu open, unplug → the menu switches to "disconnected" without closing.
 
 **Commit title.** `Phase 3: Detect the headset and turn sidetone off from the tray`
 

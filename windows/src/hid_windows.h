@@ -8,10 +8,14 @@
 #include <cstdint>
 #include <expected>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "hidpp.h"
 #include "win32.h"
+
+// True when a device-interface path belongs to the G635: it contains "VID_046D&PID_0A89", in either case.
+bool IsG635Path(std::wstring_view path);
 
 // The device-interface paths of the plugged-in G635 for one interface class: GUID_DEVINTERFACE_USB_DEVICE
 // for the USB device, or HidInterfaceClass() for its HID collections. Empty when it isn't plugged in.

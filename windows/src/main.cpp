@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "app.h"
 #include "diag.h"
 #include "log.h"
 #include "strings.h"
@@ -15,34 +16,7 @@
 
 namespace {
 
-LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
-    switch (message) {
-    case WM_CLOSE:  // sent by taskkill (without /f) and, later, by install/uninstall
-        DestroyWindow(window);
-        return 0;
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
-    default:
-        return DefWindowProcW(window, message, wParam, lParam);
-    }
-}
-
-// A hidden top-level window, never shown. Not HWND_MESSAGE: message-only windows don't get
-// broadcasts, and the tray needs the TaskbarCreated broadcast to come back after Explorer restarts.
-HWND CreateHiddenWindow(HINSTANCE instance) {
-    const WNDCLASSEXW windowClass{
-        .cbSize = sizeof(WNDCLASSEXW),
-        .lpfnWndProc = WindowProc,
-        .hInstance = instance,
-        .lpszClassName = ids::kWindowClass,
-    };
-    if (!RegisterClassExW(&windowClass)) return nullptr;
-    return CreateWindowExW(0, ids::kWindowClass, ui::kAppName, WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr,
-                           instance, nullptr);
-}
-
-// The tray app (no arguments). For now: the single-instance check, the hidden window and the message loop.
+// The tray app (no arguments): one instance only, then the App until Quit.
 int RunTray(HINSTANCE instance) {
     const UniqueHandle mutex{CreateMutexW(nullptr, FALSE, ids::kMutex)};
     const DWORD mutexError = GetLastError();
@@ -55,21 +29,13 @@ int RunTray(HINSTANCE instance) {
         return 0;
     }
 
-    if (!CreateHiddenWindow(instance)) {
-        Log(L"can't create the window (error %lu)", GetLastError());
-        return 1;
-    }
     Log(L"started, version %hs", SIDETONE_VERSION_STRING);
-
-    MSG message;
-    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-        TranslateMessage(&message);
-        DispatchMessageW(&message);
-    }
-
+    const std::unique_ptr<App> app = App::Create(instance);
+    if (!app) return 1;
+    const int exitCode = app->Run();
     Log(L"exiting");
-    return static_cast<int>(message.wParam);
-}  // the mutex is closed here, on every return path above
+    return exitCode;
+}  // the App, then the mutex, are released here
 
 // The command-line arguments, without the program name.
 std::vector<std::wstring> Arguments() {

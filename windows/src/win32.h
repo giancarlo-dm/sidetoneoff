@@ -7,6 +7,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 // Closes a kernel handle (file, event, mutex, thread). `operator()` lets an object be called like a
 // function; std::unique_ptr calls it when it lets go of the handle.
@@ -22,6 +23,18 @@ using UniqueHandle = std::unique_ptr<void, HandleCloser>;
 inline UniqueHandle OwnFileHandle(HANDLE handle) {
     return UniqueHandle(handle == INVALID_HANDLE_VALUE ? nullptr : handle);
 }
+
+// A RegisterDeviceNotificationW registration, unregistered automatically.
+struct DeviceNotificationCloser {
+    void operator()(HDEVNOTIFY notification) const noexcept { UnregisterDeviceNotification(notification); }
+};
+using UniqueDeviceNotification = std::unique_ptr<void, DeviceNotificationCloser>;
+
+// A menu, destroyed automatically. HMENU points to an opaque struct, hence the remove_pointer_t.
+struct MenuDestroyer {
+    void operator()(HMENU menu) const noexcept { DestroyMenu(menu); }
+};
+using UniqueMenu = std::unique_ptr<std::remove_pointer_t<HMENU>, MenuDestroyer>;
 
 // The system's text for an error code, e.g. 2 -> "The system cannot find the file specified."
 inline std::wstring SystemErrorText(DWORD error) {

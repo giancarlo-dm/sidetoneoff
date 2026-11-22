@@ -45,6 +45,7 @@ enum class Step : std::uint8_t {
     Timeout,     // no answer before the deadline
     HidppError,  // the headset answered with a HID++ error code
     NoFeature,   // the headset doesn't have the feature
+    Verify,      // after a set, the headset reads back a different value
 };
 
 // What went wrong. Functions return it as a value, never throw it: see std::expected below.
@@ -53,6 +54,7 @@ struct Error {
     std::uint32_t osError = 0;    // OS error code (GetLastError on Windows), 0 if none
     std::uint8_t hidppError = 0;  // HID++ error code sent by the headset, 0 if none
     std::uint16_t featureId = 0;  // the feature being called, 0 if none
+    std::uint8_t readBack = 0;    // Step::Verify: the value the headset reported
 };
 
 // One line for logs and --diag, e.g. "no answer from the headset within 1 s (feature 0x8300)".
