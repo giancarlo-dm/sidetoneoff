@@ -394,7 +394,7 @@ Runs without the mutex or tray, so it can run while the tray instance is running
 ```
 .gitignore  .gitattributes
 mac/                   Mac app (unchanged)
-claude/                spec, plan and session summary (thoughts/ until 2026-11-23)
+claude/                plans and specs, one folder per release; sessions/ has the session summaries (thoughts/ until 2026-11-23)
 windows/
   build.ps1            build (+ -Install); fail fast
   make-icon.ps1        the glyph (M12) → build/app.ico and build/tray.ico, via System.Drawing
