@@ -1,10 +1,15 @@
-// Version info: Task Manager, Startup apps and the Windows 11 toast show the app by these names.
+// The exe's resources: the app icon, and the version info.
 #pragma code_page(65001)
 
 #include <winresrc.h>
 
+#include "resource.h"
 #include "version.h"
 
+// Drawn by make-icon.ps1 into build/, which build.ps1 passes to rc with /I.
+IDI_APP ICON "app.ico"
+
+// Version info: Task Manager, Startup apps and the Windows 11 toast show the app by these names.
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION    SIDETONE_VERSION_MAJOR, SIDETONE_VERSION_MINOR, SIDETONE_VERSION_PATCH, 0
  PRODUCTVERSION SIDETONE_VERSION_MAJOR, SIDETONE_VERSION_MINOR, SIDETONE_VERSION_PATCH, 0

@@ -91,6 +91,12 @@ LRESULT App::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         // NOTIFYICON_VERSION_4: the event is in the low word of lParam, the anchor point in wParam.
         OnTrayEvent(LOWORD(lParam), POINT{GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam)});
         return 0;
+    case WM_SETTINGCHANGE:  // e.g. "ImmersiveColorSet": light or dark mode was switched
+    case WM_DPICHANGED:     // display scale changed
+    case WM_DISPLAYCHANGE:  // resolution or monitors changed
+        // The tray redraws its icon only if the taskbar's theme or icon size really changed.
+        if (tray_) tray_->UpdateIcon();
+        return 0;
     case WM_CLOSE:  // sent by taskkill (without /f) and, later, by install/uninstall
         if (tray_ && tray_->IsMenuOpen()) {
             // The menu is running further up this call stack (inside Tray::PopUpMenu). Destroying the window

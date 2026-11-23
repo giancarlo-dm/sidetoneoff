@@ -41,8 +41,7 @@ const wchar_t* StatusText(HeadsetStatus status) {
     return L"";
 }
 
-Tray::Tray(HWND window, UINT callbackMessage)
-    : window_(window), callbackMessage_(callbackMessage), icon_(LoadIconW(nullptr, IDI_APPLICATION)) {
+Tray::Tray(HWND window, UINT callbackMessage) : window_(window), callbackMessage_(callbackMessage) {
     Add();
 }
 
@@ -52,12 +51,14 @@ Tray::~Tray() {
 }
 
 void Tray::Add() {
+    RedrawIconsIfStale();
+
     NOTIFYICONDATAW data = IconData(window_);
     Shell_NotifyIconW(NIM_DELETE, &data);  // in case it is still there (e.g. TaskbarCreated after a DPI change)
 
     data.uFlags = NIF_MESSAGE | NIF_ICON;
     data.uCallbackMessage = callbackMessage_;
-    data.hIcon = icon_;
+    data.hIcon = CurrentIcon();
     SetTooltip(data, status_);
     if (!Shell_NotifyIconW(NIM_ADD, &data)) {
         // Normal at sign-in if Explorer isn't up yet; TaskbarCreated will bring us back here.
@@ -69,10 +70,38 @@ void Tray::Add() {
     Log(L"tray icon added");
 }
 
+void Tray::UpdateIcon() {
+    if (!RedrawIconsIfStale()) return;
+    NOTIFYICONDATAW data = IconData(window_);
+    data.uFlags = NIF_ICON;
+    data.hIcon = CurrentIcon();
+    Shell_NotifyIconW(NIM_MODIFY, &data);
+}
+
+bool Tray::RedrawIconsIfStale() {
+    const TaskbarStyle style = CurrentTaskbarStyle();
+    if (icon_ && dimmedIcon_ && style.iconSize == iconStyle_.iconSize && style.light == iconStyle_.light) {
+        return false;
+    }
+    iconStyle_ = style;
+    icon_ = RenderTrayIcon(style, false);
+    dimmedIcon_ = RenderTrayIcon(style, true);
+    Log(L"tray icon drawn: %d px, %s taskbar", style.iconSize, style.light ? L"light" : L"dark");
+    return true;
+}
+
+HICON Tray::CurrentIcon() const {
+    const UniqueIcon& icon = status_ == HeadsetStatus::Disconnected ? dimmedIcon_ : icon_;
+    // If drawing failed (logged), a stock icon keeps the tray icon there, and its menu reachable.
+    return icon ? icon.get() : LoadIconW(nullptr, IDI_APPLICATION);
+}
+
 void Tray::Show(HeadsetStatus status) {
     const bool changed = status != status_;
     status_ = status;
     NOTIFYICONDATAW data = IconData(window_);
+    data.uFlags = NIF_ICON;
+    data.hIcon = CurrentIcon();
     SetTooltip(data, status);
     Shell_NotifyIconW(NIM_MODIFY, &data);
 

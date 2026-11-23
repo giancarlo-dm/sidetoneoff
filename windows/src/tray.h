@@ -3,6 +3,9 @@
 
 #include <windows.h>
 
+#include "tray_icon.h"
+#include "win32.h"
+
 // The headset's state as the user sees it (spec's state table).
 enum class HeadsetStatus {
     Disconnected,
@@ -32,10 +35,15 @@ public:
     Tray& operator=(const Tray&) = delete;
 
     // Adds the icon again. Needed after Explorer restarts (the TaskbarCreated message), which drops every icon.
+    // Explorer also sends TaskbarCreated when the taskbar's DPI changes, so the icon is redrawn if needed.
     void Add();
 
-    // Updates the tooltip (and, from Phase 4, the icon) to `status`, which the menu also shows. If the menu
-    // is open, it is reopened in place with the new status, so it never shows a stale one.
+    // Redraws the icon if the taskbar's theme or DPI changed since it was drawn; otherwise does nothing.
+    // Call it when Windows says a setting, the DPI or the display changed.
+    void UpdateIcon();
+
+    // Updates the tooltip and the icon (dimmed while disconnected) to `status`, which the menu also shows.
+    // If the menu is open, it is reopened in place with the new status, so it never shows a stale one.
     void Show(HeadsetStatus status);
 
     // Shows the menu at `anchor` (screen coordinates) and returns the item picked. Returns only when the
@@ -49,11 +57,15 @@ public:
 
 private:
     MenuCommand TrackMenuOnce(POINT anchor);
+    bool RedrawIconsIfStale();  // true if it drew them again
+    HICON CurrentIcon() const;  // the icon for status_
 
     HWND window_;
     UINT callbackMessage_;
     HeadsetStatus status_ = HeadsetStatus::Disconnected;
-    HICON icon_;  // Phase 3 placeholder: a shared system icon, not owned
+    TaskbarStyle iconStyle_;  // what icon_ and dimmedIcon_ were drawn for
+    UniqueIcon icon_;
+    UniqueIcon dimmedIcon_;  // shown while disconnected
     bool menuOpen_ = false;
     bool reopenMenu_ = false;  // set when the status changes while the menu is open
 };

@@ -1,4 +1,5 @@
-# Builds windows\build\SidetoneOff.exe with Visual Studio C++ toolset on this PC, and runs the unit tests.
+# Builds windows\build\SidetoneOff.exe with Visual Studio C++ toolset on this PC, with the app icon drawn by
+# make-icon.ps1, and runs the unit tests.
 # Usage (Windows PowerShell 5.1 or PowerShell 7): .\windows\build.ps1
 # Fails fast: any tool error, a failing unit test, a toolset older than MSVC 14.52, or an exe over 300 KB
 # stops the build.
@@ -84,8 +85,11 @@ try {
     }
     New-Item -ItemType Directory -Path $Obj, $TestObj | Out-Null
 
+    Write-Host '==> Icon'
+    & (Join-Path $Root 'make-icon.ps1') -Out (Join-Path $Build 'app.ico')
+
     Write-Host '==> Resources'
-    Invoke-Tool rc /nologo /I $Src /fo (Join-Path $Obj 'app.res') (Join-Path $Res 'app.rc')
+    Invoke-Tool rc /nologo /I $Src /I $Build /fo (Join-Path $Obj 'app.res') (Join-Path $Res 'app.rc')
 
     Write-Host '==> Compile'
     $sources = @(Get-ChildItem $Src -Filter *.cpp | ForEach-Object FullName)

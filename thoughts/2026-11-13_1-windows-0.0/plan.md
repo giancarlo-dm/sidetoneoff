@@ -36,6 +36,7 @@ Answered 2026-11-21.
 | A1 | Code structure, with RGB and other features in mind | **Hybrid** (decided after Phase 1). Classes for what owns a resource or keeps state, free functions for operations. One interface, `Transport`, because there really are several implementations (Windows now; Linux, Mac and tests later). No inheritance hierarchies. Errors are `std::expected` values, not exceptions. See 5.0. |
 | L1 | Conversation language | **English** from 2026-11-21, at your request. This overrides the spec's pt-BR. Windows UI paths stay in their English names. |
 | M10 | Unit tests with a fake `Transport` (5.0) | **Yes** (answered at the start of Phase 2). `windows/tests/tests.cpp` builds into one small test exe, with plain checks and no framework. `build.ps1` builds and runs it on every build, before the app is linked, and a failing test fails the build. The tests need no headset. They cover the request bytes (`11 FF 07 1A 00 …`), response matching, skipping unsolicited reports, HID++ errors, a missing feature, timeouts, write errors and the error text. A read-back that isn't 0 is covered in Phase 3, with `Apply`. |
+| M11 | App icon at small sizes (found in Phase 4: with the spec's proportions, the glyph is a blur at 16 and 20 px and soft at 24 px) | **A small-size layout at 16, 20 and 24 px** (answered 2026-11-23). The tile fills the icon, and the glyph, at 75% of it, is hinted onto whole pixels: 1-bit at 16 and 20 px, smoothed at 24 px, with no outline. From 32 px up, the spec's layout with the thickened glyph (M8). |
 
 Decisions made earlier in the conversation (installer, detection, read-back, Quit…) are in section 3.
 
@@ -81,6 +82,9 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 | 12 | Conversation language | pt-BR | **English** (L1) | Your request. |
 | 13 | Connected state | `connectedCount` counter, as on the Mac | Re-read from the system on each G635 removal (5.2) | A counter can drift if a notification is missed. |
 | 14 | Open menu | — | **Updates live**: it reopens in place when the state changes (5.4) | Found in the Phase 3 review: an unplug while the menu was open left it stale. The Mac menu updates live. |
+| 15 | App icon at 16–24 px | The Mac's proportions at every size | **Small-size layout** (M11) | With the Mac's proportions the glyph is 6–10 px wide and unreadable. |
+| 16 | Tray icon alpha | "32-bpp premultiplied-alpha `HICON`" | **Straight (not premultiplied) alpha** | Measured in Phase 4: `DrawIconEx` blends icon pixels as straight alpha, so premultiplied pixels would draw darker edges. |
+| 17 | PNG images in `app.ico` | 256 px only | **48, 64 and 256 px** | Windows reads PNG icons at any size, and this saves about 20 KB of the 300 KB budget. 16–32 px stay plain bitmaps. |
 
 UI strings follow `spec.md`. They differ from the Mac's on purpose.
 
@@ -165,7 +169,8 @@ HID: \\?\HID#VID_046D&PID_0A89&MI_03&Col01#…  UsagePage 0x000C Usage 0x0001  i
 | `Profile` + `Apply()` | struct + free function | What to apply on each connection. In this version that is `sidetone = 0`. | `profile.*` | 3 |
 | `Worker` | class | The thread, the `wake` and `stop` events, and the retries | `worker.*` | 3 |
 | `DeviceWatcher` | class | The two device-notification registrations and the connected count | `devices.*` | 3 |
-| `Tray` | class | The tray icon, menu and balloon | `tray.*` | 3, 4 |
+| `Tray` | class | The tray icon, menu and balloon. Keeps the normal and dimmed icons, and redraws them when the taskbar changes. | `tray.*` | 3, 4 |
+| `CurrentTaskbarStyle`, `RenderTrayIcon` | free functions | Read the taskbar's icon size and theme; draw the glyph into an `HICON` | `tray_icon.*` | 4 |
 | `App` | class | The hidden window, its window proc and the state machine. Owns `Worker`, `DeviceWatcher` and `Tray`. | `app.*` | 3 |
 | `RunDiag`, install / uninstall | free functions | Nothing long-lived to own | `diag.*`, `install.*` | 2, 5 |
 
@@ -324,11 +329,18 @@ As in the spec, with these specifics:
   - Phase 3 uses the stock `IDI_APPLICATION` icon as a placeholder.
 - **Menu:** the same menu on a left click (`NIN_SELECT`), a right click (`WM_CONTEXTMENU`) and the keyboard (`NIN_KEYSELECT`). It is built from the current state each time it opens.
   - **Live, like the Mac menu.** If the state changes while the menu is open, it closes and reopens in place with the new state. An open Win32 menu can't be resized, and the status line changes length.
-- **Glyph:** Segoe Fluent Icons `U+E7F6`, with Segoe MDL2 as fallback.
-  - Rendered into a 32-bpp premultiplied `HICON` at the taskbar's DPI.
-  - Color follows `SystemUsesLightTheme`; disconnected shows it at ~40% opacity.
-  - Re-rendered on theme change and on DPI or display change.
-- **App icon:** `make-icon.ps1` → `build/app.ico`, embedded in the exe. Spec design (tile, gradient `#665CF2` → `#3D2EB2`, white glyph), with the glyph **thickened by a light stroke** to match the Mac's semibold weight (M8).
+- **Glyph:** Segoe Fluent Icons `U+E7F6`, with Segoe MDL2 Assets as fallback (`tray_icon.*`).
+  - A font counts only if it has the glyph. GDI quietly puts Arial in place of a missing font.
+  - Size: `GetSystemMetricsForDpi(SM_CXSMICON, dpi)`, with the DPI of the taskbar window (`Shell_TrayWnd`), which is that of its monitor. Without Explorer, the system DPI.
+  - Drawn with GDI at an em size equal to the icon size, at (0, 0). Both fonts' em box is exactly the icon (ascent = em, no descent, measured), so the font's own hinting and centering apply.
+  - Drawn white on black with grayscale smoothing. The brightness becomes the alpha of a 32-bpp `HICON` with **straight alpha** (section 3, #16).
+  - Color follows `SystemUsesLightTheme`: white on a dark taskbar, black on a light one. Disconnected shows it at 40% opacity.
+  - The normal and dimmed icons are drawn once and kept. They're redrawn only if the icon size or the theme really changed, which is checked on any `WM_SETTINGCHANGE`, `WM_DPICHANGED`, `WM_DISPLAYCHANGE` and `TaskbarCreated`. Explorer also sends `TaskbarCreated` when the taskbar's DPI changes.
+  - If drawing fails (logged), the stock application icon keeps the tray icon, and its menu, there.
+- **App icon:** `make-icon.ps1` → `build/app.ico`, embedded in the exe as its first icon (`IDI_APP` in `res/resource.h`). Sizes 16, 20, 24, 32, 48, 64 and 256.
+  - From 32 px: the spec design (a tile, the gradient `#665CF2` → `#3D2EB2`, a white glyph), with the glyph **thickened by a light outline**, 3% of its em size, to match the Mac's semibold weight (M8).
+  - At 16, 20 and 24 px: the small-size layout (M11).
+  - 48, 64 and 256 px are stored as PNG, the others as 32-bit bitmaps with a 1-bit mask (section 3, #17). The script writes the `.ico` itself, because System.Drawing can't save a multi-size icon with alpha.
 - **First-run balloon:** the spec's text, shown once.
 
 ### 5.5 `--diag`
@@ -370,7 +382,8 @@ windows/
     win32.h            RAII wrappers for Win32 handles
     worker.cpp/.h      Worker: thread, coalescing, retries
     devices.cpp/.h     DeviceWatcher: notifications, enumeration, counting
-    tray.cpp/.h        Tray: icon rendering, menu, balloon
+    tray.cpp/.h        Tray: the icon, menu, balloon
+    tray_icon.cpp/.h   the tray glyph: taskbar size and theme, GDI rendering
     install.cpp/.h     install / update / uninstall (free functions)
     diag.cpp/.h        --diag (free function)
     strings.h          every UI string in one place (backport / Linux)
@@ -386,7 +399,7 @@ windows/
 1. Find VS with `vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. Build Tools are only found with `-products *`.
 2. Prepend the VS Installer dir to PATH. Without it, VsDevCmd prints "'vswhere.exe' is not recognized".
 3. `Enter-VsDevShell -arch=x64`.
-4. Run `make-icon.ps1`, then `rc`.
+4. Run `make-icon.ps1`, which writes `build/app.ico`, then `rc` with `/I build`, so `app.rc` finds the icon.
 5. Fail fast if `$env:VCToolsVersion` is below **14.52**, the first MSVC with stable `/std:c++23`.
 6. Compile: `cl /std:c++23 /permissive- /utf-8 /W4 /WX /sdl /MT /O1 /GL /Zi /EHsc /guard:cf`, with `UNICODE`, `WIN32_LEAN_AND_MEAN`, `NOMINMAX` and `_WIN32_WINNT=0x0A00` defined. `/utf-8` keeps the "—" in the status strings intact.
 7. Link: `link /WX /LTCG /SUBSYSTEM:WINDOWS /DEBUG /INCREMENTAL:NO /OPT:REF /OPT:ICF /PDBALTPATH:%_PDB% /GUARD:CF /CETCOMPAT /MANIFEST:EMBED /MANIFESTUAC:NO /MANIFESTINPUT:res\app.manifest` with `kernel32 user32 gdi32 shell32 comctl32 advapi32 ole32 uuid hid cfgmgr32`.
@@ -506,15 +519,20 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 ### Phase 4: Icons
 **Changes**
-- Tray glyph rendering: theme, DPI, dimming, re-render.
-- `make-icon.ps1` → `app.ico` with sizes 16/20/24/32/48/64/256, glyph thickened (M8), embedded via `rc`.
+- `tray_icon.*`: the tray glyph, for the taskbar's theme and DPI.
+- `Tray` keeps a normal and a dimmed icon, shows the dimmed one while disconnected, and redraws both when the taskbar changes. `App` passes on `WM_SETTINGCHANGE`, `WM_DPICHANGED` and `WM_DISPLAYCHANGE`.
+- `win32.h`: RAII wrappers for icons, GDI objects and memory DCs.
+- `make-icon.ps1` → `app.ico` with sizes 16/20/24/32/48/64/256, the glyph thickened (M8), and the small-size layout (M11). It's embedded via `rc` (`res/resource.h`).
+- Plan: M11, section 3 #15–#17, and 5.4.
 
 **My checks**
-- `app.ico` has every size.
+- The exe's icon group has every size, and `LoadImage` loads each one at its exact size.
 - I render preview PNGs of the tray icon (light/dark, connected/dimmed, 100–200%) and of the app icon, and look at them.
+- `DrawIconEx` draws the tray icon's edges as straight alpha predicts.
+- Sending the app a settings change, a display change and `TaskbarCreated` redraws nothing when nothing changed, and the app keeps running.
 
 **You**
-1. Switch the taskbar between light and dark → the icon color follows.
+1. Switch Windows between light and dark mode → the icon color follows. The icon may be in the ^ overflow until you pin it.
 2. Set display scale to 150% → the icon stays sharp.
 3. Unplug → the icon dims.
 4. The exe's icon in Explorer.

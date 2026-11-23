@@ -36,6 +36,26 @@ struct MenuDestroyer {
 };
 using UniqueMenu = std::unique_ptr<std::remove_pointer_t<HMENU>, MenuDestroyer>;
 
+// An icon made with CreateIconIndirect, destroyed automatically.
+struct IconDestroyer {
+    void operator()(HICON icon) const noexcept { DestroyIcon(icon); }
+};
+using UniqueIcon = std::unique_ptr<std::remove_pointer_t<HICON>, IconDestroyer>;
+
+// GDI objects (bitmaps, fonts), deleted automatically. GDI can't delete an object that is still selected
+// into a DC: select the previous one back first (see SelectedObject in tray_icon.cpp).
+struct GdiObjectDeleter {
+    void operator()(HGDIOBJ object) const noexcept { DeleteObject(object); }
+};
+using UniqueBitmap = std::unique_ptr<std::remove_pointer_t<HBITMAP>, GdiObjectDeleter>;
+using UniqueFont = std::unique_ptr<std::remove_pointer_t<HFONT>, GdiObjectDeleter>;
+
+// A memory DC (CreateCompatibleDC), deleted automatically.
+struct DcDeleter {
+    void operator()(HDC dc) const noexcept { DeleteDC(dc); }
+};
+using UniqueDc = std::unique_ptr<std::remove_pointer_t<HDC>, DcDeleter>;
+
 // The system's text for an error code, e.g. 2 -> "The system cannot find the file specified."
 inline std::wstring SystemErrorText(DWORD error) {
     wchar_t text[512];
