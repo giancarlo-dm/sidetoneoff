@@ -1,4 +1,4 @@
-// The exe's resources: the app icon, and the version info.
+// The exe's resources: the app icon, the tray icon's glyph, and the version info.
 #pragma code_page(65001)
 
 #include <winresrc.h>
@@ -8,6 +8,7 @@
 
 // Drawn by make-icon.ps1 into build/, which build.ps1 passes to rc with /I.
 IDI_APP ICON "app.ico"
+IDI_TRAY ICON "tray.ico"
 
 // Version info: Task Manager, Startup apps and the Windows 11 toast show the app by these names.
 VS_VERSION_INFO VERSIONINFO

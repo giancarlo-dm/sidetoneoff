@@ -1,108 +1,114 @@
-# Draws the app icon, an .ico with every size Windows asks for, with System.Drawing. build.ps1 runs it and
-# res/app.rc embeds the result in the exe.
-# Usage (Windows PowerShell 5.1 or PowerShell 7): .\windows\make-icon.ps1 -Out <path\app.ico>
+# Draws the app icon and the tray icon's glyph with System.Drawing. build.ps1 runs it, and res/app.rc embeds both.
+# Usage (Windows PowerShell 5.1 or PowerShell 7): .\windows\make-icon.ps1 -OutDir <folder>
+#   -> <folder>\app.ico and <folder>\tray.ico
 #
-# The design follows mac/make-icon.swift: a rounded tile filling 80% of the canvas, with a corner radius of
-# 22.5% of its width, a vertical gradient from #665CF2 (top) to #3D2EB2 (bottom), and the white headphones
-# glyph at half the tile's width. SF Symbols' license only covers Apple platforms, so the glyph is Segoe Fluent
-# Icons U+E7F6 (Segoe MDL2 Assets on Windows 10). Both are lighter than the Mac's semibold symbol, so the glyph
-# also gets a white outline that thickens it (plan, decision M8).
+# The glyph is an original drawing of headphones (plan, decision M12): a rounded headband with filled, rounded ear
+# cups. The Mac app's icons use SF Symbols' "headphones", which Apple licenses for Apple platforms only, and never
+# for app icons.
 #
-# At 16, 20 and 24 px those proportions leave a glyph too small to read, so these sizes use a small-size layout
-# (plan, decision M11): the tile fills the icon, and the glyph, at 75% of it, is hinted onto whole pixels.
+# app.ico follows mac/make-icon.swift at every size (decision M11): a rounded tile filling 80% of the canvas, with a
+# corner radius of 22.5% of its width, a vertical gradient from #665CF2 (top) to #3D2EB2 (bottom), and the white
+# glyph at about half the tile's width.
+# tray.ico is the glyph alone, white on transparent, at the tray's icon size for each display scale. The app recolors
+# it for the taskbar's theme and dims it (tray_icon.cpp).
 
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Out)
+param([Parameter(Mandatory)][string]$OutDir)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-$Sizes = @(16, 20, 24, 32, 48, 64, 256)
-$SmallLayoutSizes = @(16, 20, 24)  # decision M11
-# Stored PNG-compressed, which Windows reads at any size, and which keeps the exe small. The small sizes stay
-# plain bitmaps, which every icon reader takes.
-$PngSizes = @(48, 64, 256)
-$Glyph = [string][char]0xE7F6
+$AppSizes = @(16, 20, 24, 32, 48, 64, 256)
+# Stored PNG-compressed, which Windows reads at any size, and which keeps the exe small. The small app sizes stay
+# plain bitmaps, which every icon reader takes; tray.ico is only read by the app itself.
+$AppPngSizes = @(48, 64, 256)
+$TraySizes = @(16, 20, 24, 28, 32, 36, 40, 48, 56, 64)  # the small-icon size at 100%, 125%, … 400% display scale
 $TopColor = [System.Drawing.Color]::FromArgb(0x66, 0x5C, 0xF2)
 $BottomColor = [System.Drawing.Color]::FromArgb(0x3D, 0x2E, 0xB2)
-$OutlineWidth = 0.03  # as a fraction of the glyph's em size (M8)
 
-function Get-IconFontFamily {
-    foreach ($name in 'Segoe Fluent Icons', 'Segoe MDL2 Assets') {
-        try { return New-Object System.Drawing.FontFamily $name }
-        catch { Write-Verbose "$name is not installed" }
-    }
-    throw 'Neither Segoe Fluent Icons nor Segoe MDL2 Assets is installed.'
-}
-
-function New-RoundedRectangle([System.Drawing.RectangleF]$Rect, [float]$Radius) {
+function New-RoundedRectangle([float]$X, [float]$Y, [float]$Width, [float]$Height, [float]$Radius) {
     $d = $Radius * 2
     $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path.AddArc($Rect.X, $Rect.Y, $d, $d, 180, 90)
-    $path.AddArc($Rect.Right - $d, $Rect.Y, $d, $d, 270, 90)
-    $path.AddArc($Rect.Right - $d, $Rect.Bottom - $d, $d, $d, 0, 90)
-    $path.AddArc($Rect.X, $Rect.Bottom - $d, $d, $d, 90, 90)
+    $path.AddArc($X, $Y, $d, $d, 180, 90)
+    $path.AddArc($X + $Width - $d, $Y, $d, $d, 270, 90)
+    $path.AddArc($X + $Width - $d, $Y + $Height - $d, $d, $d, 0, 90)
+    $path.AddArc($X, $Y + $Height - $d, $d, $d, 90, 90)
     $path.CloseFigure()
     return $path
 }
 
-# The icon at one size, drawn at that size (not scaled down from a bigger one).
-function New-IconBitmap([int]$Size, [System.Drawing.FontFamily]$FontFamily) {
-    $small = $SmallLayoutSizes -contains $Size
-    $bitmap = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $tilePath = $null; $tileBrush = $null; $font = $null; $glyphPath = $null; $matrix = $null; $outline = $null
+# The headphones, in the square ($Left, $Top, $Size). The drawing is laid out on a 24-unit grid and spans 2.5 to
+# 21.5 on both axes, so it sits centered with a margin.
+function Draw-Headphones([System.Drawing.Graphics]$Graphics, [float]$Left, [float]$Top, [float]$Size,
+                         [System.Drawing.Color]$Color) {
+    $k = $Size / 24  # pixels per grid unit
+    $band = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $pen = New-Object System.Drawing.Pen $Color, (2 * $k)  # 2 units: about the Mac symbol's semibold weight (M8)
+    $brush = New-Object System.Drawing.SolidBrush $Color
+    $cups = @()
     try {
-        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        # Headband: a half circle (center 12,12, radius 8.5), continued straight down into the ear cups.
+        $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $band.AddLine($Left + 3.5 * $k, $Top + 16 * $k, $Left + 3.5 * $k, $Top + 12 * $k)
+        $band.AddArc($Left + 3.5 * $k, $Top + 3.5 * $k, 17 * $k, 17 * $k, 180, 180)
+        $band.AddLine($Left + 20.5 * $k, $Top + 12 * $k, $Left + 20.5 * $k, $Top + 16 * $k)
+        $Graphics.DrawPath($pen, $band)
+        # Ear cups: solid rounded rectangles, flush with the band's outer edge.
+        foreach ($x in 2.5, 16) {
+            $cup = New-RoundedRectangle ($Left + $x * $k) ($Top + 13.5 * $k) (5.5 * $k) (8 * $k) (2.5 * $k)
+            $cups += $cup
+            $Graphics.FillPath($brush, $cup)
+        }
+    }
+    finally {
+        foreach ($disposable in @($band, $pen, $brush) + $cups) { $disposable.Dispose() }
+    }
+}
 
-        $tileWidth = if ($small) { $Size } else { $Size * 0.8 }
-        $margin = ($Size - $tileWidth) / 2
-        $tile = New-Object System.Drawing.RectangleF $margin, $margin, $tileWidth, $tileWidth
-        $tilePath = New-RoundedRectangle $tile ($tile.Width * 0.225)
+function New-Canvas([int]$Size) {
+    return New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+}
+
+function Start-Drawing([System.Drawing.Bitmap]$Bitmap) {
+    $graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
+    $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    return $graphics
+}
+
+# The app icon at one size, drawn at that size (not scaled down from a bigger one).
+function New-AppIconBitmap([int]$Size) {
+    $bitmap = New-Canvas $Size
+    $graphics = Start-Drawing $bitmap
+    $tilePath = $null; $tileBrush = $null
+    try {
+        $tile = $Size * 0.8
+        $margin = $Size * 0.1
+        $tilePath = New-RoundedRectangle $margin $margin $tile $tile ($tile * 0.225)
         # GDI+ wraps a gradient around at its brush's edges, which would tint the tile's top row with the bottom
         # color. A brush 1 px taller than the tile at each end keeps both rows clean.
-        $brushArea = New-Object System.Drawing.RectangleF $tile.X, ($tile.Y - 1), $tile.Width, ($tile.Height + 2)
+        $brushArea = New-Object System.Drawing.RectangleF $margin, ($margin - 1), $tile, ($tile + 2)
         $tileBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush $brushArea, $TopColor, $BottomColor,
             ([System.Drawing.Drawing2D.LinearGradientMode]::Vertical)
         $graphics.FillPath($tileBrush, $tilePath)
-
-        if ($small) {
-            # The font's hinting puts each stroke on whole pixels, given a whole-pixel em size and position.
-            # 1-bit up to 20 px, where smoothing would blur the 1 px strokes; smoothed at 24 px, where 1-bit
-            # shows steps on the arcs. No outline: it would undo the hinting.
-            $emSize = [math]::Round($Size * 0.75)
-            $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::None
-            $graphics.TextRenderingHint = if ($Size -le 20) { [System.Drawing.Text.TextRenderingHint]::SingleBitPerPixelGridFit }
-                                          else { [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit }
-            $font = New-Object System.Drawing.Font $FontFamily, $emSize, ([System.Drawing.FontStyle]::Regular),
-                ([System.Drawing.GraphicsUnit]::Pixel)
-            $corner = [math]::Floor(($Size - $emSize) / 2)  # the font centers the glyph in its em box
-            $graphics.DrawString($Glyph, $font, [System.Drawing.Brushes]::White, $corner, $corner,
-                [System.Drawing.StringFormat]::GenericTypographic)
-            return $bitmap
-        }
-
-        $emSize = $tile.Width * 0.5
-        $glyphPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $glyphPath.AddString($Glyph, $FontFamily, [int][System.Drawing.FontStyle]::Regular, $emSize,
-            (New-Object System.Drawing.PointF 0, 0), [System.Drawing.StringFormat]::GenericTypographic)
-        # Center the glyph's outline on the canvas, as the Mac centers its symbol.
-        $bounds = $glyphPath.GetBounds()
-        $matrix = New-Object System.Drawing.Drawing2D.Matrix
-        $matrix.Translate(($Size - $bounds.Width) / 2 - $bounds.X, ($Size - $bounds.Height) / 2 - $bounds.Y)
-        $glyphPath.Transform($matrix)
-        $graphics.FillPath([System.Drawing.Brushes]::White, $glyphPath)
-        $outline = New-Object System.Drawing.Pen ([System.Drawing.Color]::White), ($emSize * $OutlineWidth)
-        $outline.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-        $graphics.DrawPath($outline, $glyphPath)
+        # The 24-unit grid at 60% of the tile puts the headphones (19 units across) at about half the tile.
+        $glyph = $tile * 0.6
+        Draw-Headphones $graphics (($Size - $glyph) / 2) (($Size - $glyph) / 2) $glyph ([System.Drawing.Color]::White)
     }
     finally {
-        foreach ($disposable in $outline, $matrix, $glyphPath, $font, $tileBrush, $tilePath, $graphics) {
-            if ($null -ne $disposable) { $disposable.Dispose() }
-        }
+        foreach ($disposable in $tileBrush, $tilePath, $graphics) { if ($null -ne $disposable) { $disposable.Dispose() } }
     }
+    return $bitmap
+}
+
+# The tray glyph at one size: white on transparent, filling the icon like the font glyph did.
+function New-TrayGlyphBitmap([int]$Size) {
+    $bitmap = New-Canvas $Size
+    $graphics = Start-Drawing $bitmap
+    try { Draw-Headphones $graphics 0 0 $Size ([System.Drawing.Color]::White) }
+    finally { $graphics.Dispose() }
     return $bitmap
 }
 
@@ -153,34 +159,36 @@ function Get-IcoBitmapBytes([System.Drawing.Bitmap]$Bitmap) {
     return , $stream.ToArray()
 }
 
-$fontFamily = Get-IconFontFamily
-$images = New-Object 'System.Collections.Generic.List[byte[]]'
-foreach ($size in $Sizes) {
-    $bitmap = New-IconBitmap $size $fontFamily
-    try {
-        if ($PngSizes -contains $size) { $images.Add((Get-PngBytes $bitmap)) }
-        else { $images.Add((Get-IcoBitmapBytes $bitmap)) }
+# Writes an .ico: a 6-byte header, one 16-byte entry per image, then the images. $NewBitmap draws one size.
+function Write-Ico([string]$Path, [int[]]$Sizes, [int[]]$PngSizes, [scriptblock]$NewBitmap) {
+    $images = New-Object 'System.Collections.Generic.List[byte[]]'
+    foreach ($size in $Sizes) {
+        $bitmap = & $NewBitmap $size
+        try {
+            if ($PngSizes -contains $size) { $images.Add((Get-PngBytes $bitmap)) }
+            else { $images.Add((Get-IcoBitmapBytes $bitmap)) }
+        }
+        finally { $bitmap.Dispose() }
     }
-    finally { $bitmap.Dispose() }
+
+    $stream = New-Object System.IO.MemoryStream
+    $writer = New-Object System.IO.BinaryWriter $stream
+    $writer.Write([uint16]0); $writer.Write([uint16]1); $writer.Write([uint16]$Sizes.Count)  # reserved, 1 = icon, count
+    $offset = 6 + 16 * $Sizes.Count
+    for ($i = 0; $i -lt $Sizes.Count; $i++) {
+        $dimension = if ($Sizes[$i] -ge 256) { 0 } else { $Sizes[$i] }  # one byte each; 0 means 256
+        $writer.Write([byte]$dimension); $writer.Write([byte]$dimension)
+        $writer.Write([byte]0); $writer.Write([byte]0)        # no palette, reserved
+        $writer.Write([uint16]1); $writer.Write([uint16]32)   # planes, bits per pixel
+        $writer.Write([uint32]$images[$i].Length); $writer.Write([uint32]$offset)
+        $offset += $images[$i].Length
+    }
+    foreach ($image in $images) { $writer.Write($image) }
+    $writer.Flush()
+    [System.IO.File]::WriteAllBytes($Path, $stream.ToArray())
+    Write-Host "==> $(Split-Path $Path -Leaf): $($Sizes -join ', ') px, $([math]::Ceiling($stream.Length / 1KB)) KB"
 }
 
-# The .ico file: a 6-byte header, one 16-byte entry per image, then the images.
-$stream = New-Object System.IO.MemoryStream
-$writer = New-Object System.IO.BinaryWriter $stream
-$writer.Write([uint16]0); $writer.Write([uint16]1); $writer.Write([uint16]$Sizes.Count)  # reserved, 1 = icon, count
-$offset = 6 + 16 * $Sizes.Count
-for ($i = 0; $i -lt $Sizes.Count; $i++) {
-    $dimension = if ($Sizes[$i] -ge 256) { 0 } else { $Sizes[$i] }  # one byte each; 0 means 256
-    $writer.Write([byte]$dimension); $writer.Write([byte]$dimension)
-    $writer.Write([byte]0); $writer.Write([byte]0)        # no palette, reserved
-    $writer.Write([uint16]1); $writer.Write([uint16]32)   # planes, bits per pixel
-    $writer.Write([uint32]$images[$i].Length); $writer.Write([uint32]$offset)
-    $offset += $images[$i].Length
-}
-foreach ($image in $images) { $writer.Write($image) }
-$writer.Flush()
-
-$path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Out)
-[System.IO.File]::WriteAllBytes($path, $stream.ToArray())
-Write-Host "==> $(Split-Path $path -Leaf): $($Sizes -join ', ') px, $([math]::Ceiling($stream.Length / 1KB)) KB, $($fontFamily.Name)"
-$fontFamily.Dispose()
+$folder = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutDir)
+Write-Ico (Join-Path $folder 'app.ico') $AppSizes $AppPngSizes { param($size) New-AppIconBitmap $size }
+Write-Ico (Join-Path $folder 'tray.ico') $TraySizes $TraySizes { param($size) New-TrayGlyphBitmap $size }

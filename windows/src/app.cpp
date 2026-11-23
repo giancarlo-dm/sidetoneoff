@@ -3,6 +3,7 @@
 #include <windowsx.h>  // GET_X_LPARAM, GET_Y_LPARAM
 #include <shellapi.h>  // NIN_SELECT, NIN_KEYSELECT
 
+#include "install.h"
 #include "log.h"
 #include "profile.h"
 #include "strings.h"
@@ -18,7 +19,7 @@ const Profile kProfile{.sidetone = std::uint8_t{0}};
 
 }  // namespace
 
-std::unique_ptr<App> App::Create(HINSTANCE instance) {
+std::unique_ptr<App> App::Create(HINSTANCE instance, bool showNotice) {
     const WNDCLASSEXW windowClass{
         .cbSize = sizeof(WNDCLASSEXW),
         .lpfnWndProc = WindowProc,
@@ -45,6 +46,12 @@ std::unique_ptr<App> App::Create(HINSTANCE instance) {
     app->worker_ = Worker::Start(app->window_, kWorkerResultMessage, kProfile);
     app->devices_ = DeviceWatcher::Create(app->window_);
     if (!app->worker_ || !app->devices_) return nullptr;  // logged by them; ~App cleans up
+
+    // "Sidetone Off is running": on every start you make, not at sign-in (decision M14).
+    if (showNotice) {
+        if (app->tray_->ShowNotice(ui::kNoticeTitle, ui::kNoticeText)) Log(L"notice shown");
+        else Log(L"can't show the notice (error %lu)", GetLastError());
+    }
 
     if (app->devices_->IsConnected()) app->TurnOffSidetone();
     return app;
@@ -97,11 +104,12 @@ LRESULT App::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         // The tray redraws its icon only if the taskbar's theme or icon size really changed.
         if (tray_) tray_->UpdateIcon();
         return 0;
-    case WM_CLOSE:  // sent by taskkill (without /f) and, later, by install/uninstall
-        if (tray_ && tray_->IsMenuOpen()) {
-            // The menu is running further up this call stack (inside Tray::PopUpMenu). Destroying the window
-            // now would delete the Tray under it, so close the menu and come back once it has returned.
-            tray_->CloseMenu();
+    case WM_CLOSE:  // sent by taskkill (without /f), and by install and uninstall to the running instance
+        if ((tray_ && tray_->IsMenuOpen()) || inDialog_) {
+            // The menu (inside Tray::PopUpMenu) or a dialog is running further up this call stack. Destroying
+            // the window now would delete the Tray under it, so close them and come back once they've returned.
+            if (tray_) tray_->CloseMenu();
+            if (dialog_) PostMessageW(dialog_, WM_CLOSE, 0, 0);  // the same as Cancel
             PostMessageW(window_, WM_CLOSE, 0, 0);
             return 0;
         }
@@ -157,16 +165,23 @@ void App::OnWorkerResult(bool off) {
 void App::OnTrayEvent(UINT event, POINT anchor) {
     // Same menu for a left click (NIN_SELECT), a right click (WM_CONTEXTMENU) and the keyboard (NIN_KEYSELECT).
     if (event != NIN_SELECT && event != WM_CONTEXTMENU && event != NIN_KEYSELECT) return;
+    if (inDialog_) {  // a dialog is open: show it again rather than a second menu
+        if (dialog_) SetForegroundWindow(dialog_);
+        return;
+    }
     switch (tray_->PopUpMenu(anchor)) {
     case MenuCommand::SetAgain:
         Log(L"set sidetone off again");
         TurnOffSidetone();
         break;
+    case MenuCommand::Uninstall:
+        Uninstall();
+        break;
     case MenuCommand::Quit:
         Log(L"quit");
         DestroyWindow(window_);
         break;
-    case MenuCommand::Status:
+    case MenuCommand::Status:  // can't happen: the status line is disabled
     case MenuCommand::None:
         break;
     }
@@ -175,6 +190,27 @@ void App::OnTrayEvent(UINT event, POINT anchor) {
 void App::TurnOffSidetone() {
     SetStatus(HeadsetStatus::Applying);
     worker_->RequestApply();
+}
+
+void App::Uninstall() {
+    inDialog_ = true;
+    const bool confirmed = ConfirmUninstall(&dialog_);
+    inDialog_ = false;
+    if (!confirmed) {
+        Log(L"uninstall cancelled");
+        return;
+    }
+
+    const auto unregistered = Unregister();
+    if (!unregistered) {
+        Log(L"uninstall failed: %s", DescribeError(unregistered.error()).c_str());
+        inDialog_ = true;
+        ShowError(ui::kUninstallFailed, unregistered.error(), &dialog_);
+        inDialog_ = false;
+        return;
+    }
+    uninstalled_ = true;  // the files go once the app has stopped (wWinMain)
+    DestroyWindow(window_);
 }
 
 void App::SetStatus(HeadsetStatus status) {

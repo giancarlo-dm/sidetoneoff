@@ -1,4 +1,5 @@
-// The tray icon's picture: the headphones glyph, drawn for the taskbar's theme and DPI (plan, section 5.4).
+// The tray icon's picture: the headphones glyph, colored for the taskbar's theme and sized for its DPI
+// (plan, section 5.4).
 #pragma once
 
 #include <windows.h>
@@ -14,6 +15,6 @@ struct TaskbarStyle {
 // Reads how the taskbar looks now: its DPI and Windows' light/dark mode setting.
 TaskbarStyle CurrentTaskbarStyle();
 
-// Draws the headphones glyph (Segoe Fluent Icons U+E7F6, or Segoe MDL2 Assets on Windows 10) as an icon of
-// `style.iconSize` pixels, in the taskbar's color, at 40% opacity when `dimmed`. Empty (logged) on failure.
+// The headphones glyph (decision M12, drawn by make-icon.ps1) as an icon of `style.iconSize` pixels, in the
+// taskbar's color, at 40% opacity when `dimmed`. Empty (logged) on failure.
 UniqueIcon RenderTrayIcon(const TaskbarStyle& style, bool dimmed);

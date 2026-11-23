@@ -24,6 +24,12 @@ inline UniqueHandle OwnFileHandle(HANDLE handle) {
     return UniqueHandle(handle == INVALID_HANDLE_VALUE ? nullptr : handle);
 }
 
+// An open registry key, closed automatically.
+struct HkeyCloser {
+    void operator()(HKEY key) const noexcept { RegCloseKey(key); }
+};
+using UniqueHkey = std::unique_ptr<std::remove_pointer_t<HKEY>, HkeyCloser>;
+
 // A RegisterDeviceNotificationW registration, unregistered automatically.
 struct DeviceNotificationCloser {
     void operator()(HDEVNOTIFY notification) const noexcept { UnregisterDeviceNotification(notification); }
@@ -42,13 +48,11 @@ struct IconDestroyer {
 };
 using UniqueIcon = std::unique_ptr<std::remove_pointer_t<HICON>, IconDestroyer>;
 
-// GDI objects (bitmaps, fonts), deleted automatically. GDI can't delete an object that is still selected
-// into a DC: select the previous one back first (see SelectedObject in tray_icon.cpp).
+// A GDI bitmap, deleted automatically. GDI can't delete a bitmap that is still selected into a DC.
 struct GdiObjectDeleter {
     void operator()(HGDIOBJ object) const noexcept { DeleteObject(object); }
 };
 using UniqueBitmap = std::unique_ptr<std::remove_pointer_t<HBITMAP>, GdiObjectDeleter>;
-using UniqueFont = std::unique_ptr<std::remove_pointer_t<HFONT>, GdiObjectDeleter>;
 
 // A memory DC (CreateCompatibleDC), deleted automatically.
 struct DcDeleter {

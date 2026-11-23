@@ -1,10 +1,12 @@
 #include "tray.h"
 
+#include <commctrl.h>  // LoadIconMetric
 #include <shellapi.h>
 #include <strsafe.h>
 
 #include <iterator>
 
+#include "../res/resource.h"
 #include "log.h"
 #include "strings.h"
 #include "win32.h"
@@ -20,13 +22,6 @@ NOTIFYICONDATAW IconData(HWND window) {
     data.hWnd = window;
     data.uID = kIconId;
     return data;
-}
-
-// "Sidetone Off — <status>". NIF_SHOWTIP: with NOTIFYICON_VERSION_4 the standard tooltip only shows with it.
-void SetTooltip(NOTIFYICONDATAW& data, HeadsetStatus status) {
-    data.uFlags |= NIF_TIP | NIF_SHOWTIP;
-    StringCchPrintfW(data.szTip, std::size(data.szTip), L"%s%s%s", ui::kAppName, ui::kTooltipSeparator,
-                     StatusText(status));
 }
 
 }  // namespace
@@ -53,13 +48,12 @@ Tray::~Tray() {
 void Tray::Add() {
     RedrawIconsIfStale();
 
-    NOTIFYICONDATAW data = IconData(window_);
-    Shell_NotifyIconW(NIM_DELETE, &data);  // in case it is still there (e.g. TaskbarCreated after a DPI change)
+    NOTIFYICONDATAW gone = IconData(window_);
+    Shell_NotifyIconW(NIM_DELETE, &gone);  // in case it is still there (e.g. TaskbarCreated after a DPI change)
 
-    data.uFlags = NIF_MESSAGE | NIF_ICON;
+    NOTIFYICONDATAW data = CurrentData();
+    data.uFlags |= NIF_MESSAGE;
     data.uCallbackMessage = callbackMessage_;
-    data.hIcon = CurrentIcon();
-    SetTooltip(data, status_);
     if (!Shell_NotifyIconW(NIM_ADD, &data)) {
         // Normal at sign-in if Explorer isn't up yet; TaskbarCreated will bring us back here.
         Log(L"can't add the tray icon yet (error %lu)", GetLastError());
@@ -67,14 +61,26 @@ void Tray::Add() {
     }
     data.uVersion = NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION, &data);
+    // Version 4 hides the standard tooltip unless NIF_SHOWTIP comes with the data, and the one sent with NIM_ADD,
+    // before the version was set, doesn't count: without this, the tooltip only appeared after the first change.
+    data = CurrentData();
+    Shell_NotifyIconW(NIM_MODIFY, &data);
     Log(L"tray icon added");
+}
+
+NOTIFYICONDATAW Tray::CurrentData() const {
+    NOTIFYICONDATAW data = IconData(window_);
+    // NIF_SHOWTIP goes with every call: with NOTIFYICON_VERSION_4, the standard tooltip only shows with it.
+    data.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+    data.hIcon = CurrentIcon();
+    // Two lines: "Sidetone Off", then the status (decision M13).
+    StringCchPrintfW(data.szTip, std::size(data.szTip), L"%s\n%s", ui::kAppName, StatusText(status_));
+    return data;
 }
 
 void Tray::UpdateIcon() {
     if (!RedrawIconsIfStale()) return;
-    NOTIFYICONDATAW data = IconData(window_);
-    data.uFlags = NIF_ICON;
-    data.hIcon = CurrentIcon();
+    NOTIFYICONDATAW data = CurrentData();
     Shell_NotifyIconW(NIM_MODIFY, &data);
 }
 
@@ -99,10 +105,7 @@ HICON Tray::CurrentIcon() const {
 void Tray::Show(HeadsetStatus status) {
     const bool changed = status != status_;
     status_ = status;
-    NOTIFYICONDATAW data = IconData(window_);
-    data.uFlags = NIF_ICON;
-    data.hIcon = CurrentIcon();
-    SetTooltip(data, status);
+    NOTIFYICONDATAW data = CurrentData();
     Shell_NotifyIconW(NIM_MODIFY, &data);
 
     // An open Win32 menu can't be resized, and the status line changes length, so close it and let
@@ -111,6 +114,22 @@ void Tray::Show(HeadsetStatus status) {
         reopenMenu_ = true;
         EndMenu();
     }
+}
+
+bool Tray::ShowNotice(const wchar_t* title, const wchar_t* text) {
+    NOTIFYICONDATAW data = CurrentData();  // with the tooltip, so this call doesn't hide it
+    data.uFlags |= NIF_INFO;
+    StringCchCopyW(data.szInfoTitle, std::size(data.szInfoTitle), title);
+    StringCchCopyW(data.szInfo, std::size(data.szInfo), text);
+    // The app icon at the large-icon size for this DPI. The tray glyph would be white on white in a light toast.
+    HICON appIcon = nullptr;
+    if (FAILED(LoadIconMetric(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDI_APP), LIM_LARGE, &appIcon))) {
+        appIcon = nullptr;
+    }
+    const UniqueIcon ownedIcon{appIcon};  // Windows keeps its own copy
+    data.hBalloonIcon = appIcon;
+    data.dwInfoFlags = appIcon ? NIIF_USER | NIIF_LARGE_ICON : NIIF_INFO;
+    return Shell_NotifyIconW(NIM_MODIFY, &data) != FALSE;
 }
 
 void Tray::CloseMenu() {
@@ -136,15 +155,15 @@ MenuCommand Tray::TrackMenuOnce(POINT anchor) {
     const UniqueMenu menu{CreatePopupMenu()};
     if (!menu) return MenuCommand::None;
 
-    const bool connected = status_ != HeadsetStatus::Disconnected;
     const bool canSetAgain = status_ == HeadsetStatus::SidetoneOff || status_ == HeadsetStatus::Failed;
     const auto item = [&menu](MenuCommand command, const wchar_t* text, bool enabled) {
         AppendMenuW(menu.get(), MF_STRING | (enabled ? MF_ENABLED : MF_GRAYED), static_cast<UINT_PTR>(command), text);
     };
-    item(MenuCommand::Status, StatusText(status_), connected);
+    item(MenuCommand::Status, StatusText(status_), false);  // a status, not a command: never clickable, as on the Mac
     AppendMenuW(menu.get(), MF_SEPARATOR, 0, nullptr);
     item(MenuCommand::SetAgain, ui::kMenuSetAgain, canSetAgain);
     AppendMenuW(menu.get(), MF_SEPARATOR, 0, nullptr);
+    item(MenuCommand::Uninstall, ui::kMenuUninstall, true);
     item(MenuCommand::Quit, ui::kMenuQuit, true);
 
     SetForegroundWindow(window_);

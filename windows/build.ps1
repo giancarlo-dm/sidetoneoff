@@ -1,11 +1,12 @@
-# Builds windows\build\SidetoneOff.exe with Visual Studio C++ toolset on this PC, with the app icon drawn by
-# make-icon.ps1, and runs the unit tests.
-# Usage (Windows PowerShell 5.1 or PowerShell 7): .\windows\build.ps1
+# Builds windows\build\SidetoneOff.exe with Visual Studio C++ toolset on this PC, with the app and tray icons
+# drawn by make-icon.ps1, and runs the unit tests. With -Install, also installs it (or updates the installed one) and
+# starts it, with no dialog.
+# Usage (Windows PowerShell 5.1 or PowerShell 7): .\windows\build.ps1 [-Install]
 # Fails fast: any tool error, a failing unit test, a toolset older than MSVC 14.52, or an exe over 300 KB
 # stops the build.
 
 [CmdletBinding()]
-param()
+param([switch]$Install)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -85,8 +86,8 @@ try {
     }
     New-Item -ItemType Directory -Path $Obj, $TestObj | Out-Null
 
-    Write-Host '==> Icon'
-    & (Join-Path $Root 'make-icon.ps1') -Out (Join-Path $Build 'app.ico')
+    Write-Host '==> Icons'
+    & (Join-Path $Root 'make-icon.ps1') -OutDir $Build
 
     Write-Host '==> Resources'
     Invoke-Tool rc /nologo /I $Src /I $Build /fo (Join-Path $Obj 'app.res') (Join-Path $Res 'app.rc')
@@ -120,4 +121,17 @@ finally {
     Get-ChildItem env: | Where-Object { -not $savedEnv.ContainsKey($_.Name) } |
         ForEach-Object { Remove-Item -LiteralPath "env:$($_.Name)" }
     foreach ($name in $savedEnv.Keys) { Set-Item -LiteralPath "env:$name" -Value $savedEnv[$name] }
+}
+
+# After the environment is restored, so the installed app doesn't start with the build tools' environment.
+if ($Install) {
+    Write-Host '==> Install'
+    # A GUI app, so PowerShell wouldn't wait for it. Not Start-Process -Wait either: that also waits for the
+    # processes it starts, and --install starts the tray app, which keeps running.
+    $setup = [System.Diagnostics.Process]::Start($Exe, '--install')
+    $setup.WaitForExit()
+    if ($setup.ExitCode -ne 0) {
+        throw "SidetoneOff.exe --install failed with exit code $($setup.ExitCode). Its debug log (DebugView) says why."
+    }
+    Write-Host "==> Installed in $(Join-Path $env:LOCALAPPDATA 'Programs\Sidetone Off'), and started"
 }

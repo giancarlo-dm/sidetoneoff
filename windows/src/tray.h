@@ -2,6 +2,7 @@
 #pragma once
 
 #include <windows.h>
+#include <shellapi.h>  // NOTIFYICONDATAW
 
 #include "tray_icon.h"
 #include "win32.h"
@@ -20,8 +21,9 @@ const wchar_t* StatusText(HeadsetStatus status);
 // The menu items. 0 means the menu was dismissed.
 enum class MenuCommand : UINT {
     None = 0,
-    Status,    // the status line: enabled while connected, but does nothing
+    Status,    // the status line: always disabled, so it can't be picked
     SetAgain,  // "Set sidetone off again"
+    Uninstall,
     Quit,
 };
 
@@ -46,6 +48,10 @@ public:
     // If the menu is open, it is reopened in place with the new status, so it never shows a stale one.
     void Show(HeadsetStatus status);
 
+    // Shows a notification from the icon, with the app icon: a balloon on Windows 10, a toast on Windows 11.
+    // False if Windows didn't take it (e.g. the icon isn't in the tray yet).
+    bool ShowNotice(const wchar_t* title, const wchar_t* text);
+
     // Shows the menu at `anchor` (screen coordinates) and returns the item picked. Returns only when the
     // menu closes; messages keep being handled meanwhile, so Show() can run while it is open.
     MenuCommand PopUpMenu(POINT anchor);
@@ -59,6 +65,7 @@ private:
     MenuCommand TrackMenuOnce(POINT anchor);
     bool RedrawIconsIfStale();  // true if it drew them again
     HICON CurrentIcon() const;  // the icon for status_
+    NOTIFYICONDATAW CurrentData() const;  // the icon and tooltip for status_, for NIM_ADD and NIM_MODIFY
 
     HWND window_;
     UINT callbackMessage_;

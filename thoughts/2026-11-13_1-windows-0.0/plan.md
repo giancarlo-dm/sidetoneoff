@@ -30,13 +30,16 @@ Answered 2026-11-21.
 | M5 | `Publisher` in Installed apps | **"Giancarlo Dalle Mole"** |
 | M6 | Old setup (scheduled task, `C:\Tools\HeadsetControl`) | **It never existed** (it was brainstorming). The spec's "Old setup to remove" section is dropped, and the README says nothing about it. |
 | M7 | RGB lighting | **Not in this version.** It's for the next one (section 8). |
-| M8 | App icon glyph weight | **Thicken the glyph with a light stroke** so it matches the Mac icon's semibold weight. |
+| M8 | App icon glyph weight | **About the Mac icon's semibold weight.** The Segoe glyph got a light outline for it (Phase 4). The drawn glyph (M12) has that weight built in: a 2-unit stroke on its 24-unit grid. |
 | T1 | C++ standard | **`/std:c++23`**: the newest *stable* standard. It is complete in MSVC 14.52 (GA 2026-11-10, LTS). C++26 only exists partially under `/std:c++latest`, which changes with each compiler update. Move to C++26 once MSVC ships it stable. |
 | T2 | Toolchain | **VS 2026 Build Tools 18.12 (MSVC 14.52)**, installed 2026-11-21 with `winget install --id Microsoft.VisualStudio.BuildTools` (VCTools workload + recommended, which brings the newest Windows SDK). **VS 2019 Build Tools is removed** once the new toolchain is validated (Phase 0). |
 | A1 | Code structure, with RGB and other features in mind | **Hybrid** (decided after Phase 1). Classes for what owns a resource or keeps state, free functions for operations. One interface, `Transport`, because there really are several implementations (Windows now; Linux, Mac and tests later). No inheritance hierarchies. Errors are `std::expected` values, not exceptions. See 5.0. |
 | L1 | Conversation language | **English** from 2026-11-21, at your request. This overrides the spec's pt-BR. Windows UI paths stay in their English names. |
 | M10 | Unit tests with a fake `Transport` (5.0) | **Yes** (answered at the start of Phase 2). `windows/tests/tests.cpp` builds into one small test exe, with plain checks and no framework. `build.ps1` builds and runs it on every build, before the app is linked, and a failing test fails the build. The tests need no headset. They cover the request bytes (`11 FF 07 1A 00 …`), response matching, skipping unsolicited reports, HID++ errors, a missing feature, timeouts, write errors and the error text. A read-back that isn't 0 is covered in Phase 3, with `Apply`. |
-| M11 | App icon at small sizes (found in Phase 4: with the spec's proportions, the glyph is a blur at 16 and 20 px and soft at 24 px) | **A small-size layout at 16, 20 and 24 px** (answered 2026-11-23). The tile fills the icon, and the glyph, at 75% of it, is hinted onto whole pixels: 1-bit at 16 and 20 px, smoothed at 24 px, with no outline. From 32 px up, the spec's layout with the thickened glyph (M8). |
+| M11 | App icon at small sizes (found in Phase 4: with the spec's proportions, the glyph is a blur at 16 and 20 px) | **The Mac's layout at every size**, as in the spec. Phase 4 shipped a small-size layout for 16–24 px (a full tile with a pixel-hinted glyph). It was reverted in the Phase 5 review (2026-11-23): you found it ugly, and want the icon as on the Mac. |
+| M12 | Tray and app icon glyph (Phase 5 review: the Segoe glyph looks square next to the Mac's rounded one) | **An original drawing**: a rounded headband with filled, rounded ear cups (variant B of the drawn prototypes), drawn by `make-icon.ps1` for both icons. The Mac's SF Symbols "headphones" can't ship on Windows: Apple licenses SF Symbols for Apple platforms only, and never in app icons. Windows' icon font has no rounder headphone. |
+| M13 | Tooltip and status wording (Phase 5 review) | **Tooltip on two lines**: "Sidetone Off", then the status. When sidetone is off, the status is just "Logitech G635 connected", in the tooltip and in the menu. |
+| M14 | When "Sidetone Off is running" shows (Phase 5 review: it didn't after an update, or after Quit and reopening) | **On every start you make** (install, update, Start menu, double-click), **not at sign-in**: the Run value passes `--autostart`, which skips it. A start while the app is already running still does nothing (spec). |
 
 Decisions made earlier in the conversation (installer, detection, read-back, Quit…) are in section 3.
 
@@ -82,9 +85,14 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 | 12 | Conversation language | pt-BR | **English** (L1) | Your request. |
 | 13 | Connected state | `connectedCount` counter, as on the Mac | Re-read from the system on each G635 removal (5.2) | A counter can drift if a notification is missed. |
 | 14 | Open menu | — | **Updates live**: it reopens in place when the state changes (5.4) | Found in the Phase 3 review: an unplug while the menu was open left it stale. The Mac menu updates live. |
-| 15 | App icon at 16–24 px | The Mac's proportions at every size | **Small-size layout** (M11) | With the Mac's proportions the glyph is 6–10 px wide and unreadable. |
+| 15 | Glyph | Segoe Fluent Icons `U+E7F6`, rendered at runtime | **An original drawn headphones glyph** (M12), drawn at build time into the app icon and into `tray.ico`, which the app recolors | The Segoe glyph looks square; the Mac's rounded SF Symbol can't ship on Windows. |
 | 16 | Tray icon alpha | "32-bpp premultiplied-alpha `HICON`" | **Straight (not premultiplied) alpha** | Measured in Phase 4: `DrawIconEx` blends icon pixels as straight alpha, so premultiplied pixels would draw darker edges. |
 | 17 | PNG images in `app.ico` | 256 px only | **48, 64 and 256 px** | Windows reads PNG icons at any size, and this saves about 20 KB of the 300 KB budget. 16–32 px stay plain bitmaps. |
+| 18 | First-run notice | One sentence, shown once | The same words as a title, "Sidetone Off is running", plus the rest as text, with the app icon (5.4). Shown **on every start you make, not at sign-in** (M14). | Windows 11 shows the notice as a toast with a bold title. You want it after an update and after reopening too. |
+| 19 | Uninstall cleanup | Run value, settings key, shortcut, files | Also the StartupApproved value, Windows' record of the switch in Settings › Apps › Startup | "Nothing left" (section 7, #11), including what Windows wrote for the app. |
+| 20 | Tooltip and status | Tooltip `Sidetone Off — <status>`; "… connected — sidetone off" | Tooltip on two lines; "Logitech G635 connected" when sidetone is off (M13) | "Sidetone off" twice in one line read oddly. |
+| 21 | Run value | `"<exe>"` | `"<exe>" --autostart` | Tells the start at sign-in apart, so it shows no notice (M14). |
+| 22 | Menu status line | Grayed while disconnected, otherwise normal with a click that does nothing | **Always disabled** (grayed, not clickable) | It's a status, not a command (your Phase 5 review). The Mac's status line is always disabled too. |
 
 UI strings follow `spec.md`. They differ from the Mac's on purpose.
 
@@ -170,7 +178,7 @@ HID: \\?\HID#VID_046D&PID_0A89&MI_03&Col01#…  UsagePage 0x000C Usage 0x0001  i
 | `Worker` | class | The thread, the `wake` and `stop` events, and the retries | `worker.*` | 3 |
 | `DeviceWatcher` | class | The two device-notification registrations and the connected count | `devices.*` | 3 |
 | `Tray` | class | The tray icon, menu and balloon. Keeps the normal and dimmed icons, and redraws them when the taskbar changes. | `tray.*` | 3, 4 |
-| `CurrentTaskbarStyle`, `RenderTrayIcon` | free functions | Read the taskbar's icon size and theme; draw the glyph into an `HICON` | `tray_icon.*` | 4 |
+| `CurrentTaskbarStyle`, `RenderTrayIcon` | free functions | Read the taskbar's icon size and theme; make the glyph's `HICON` in the taskbar's color | `tray_icon.*` | 4 |
 | `App` | class | The hidden window, its window proc and the state machine. Owns `Worker`, `DeviceWatcher` and `Tray`. | `app.*` | 3 |
 | `RunDiag`, install / uninstall | free functions | Nothing long-lived to own | `diag.*`, `install.*` | 2, 5 |
 
@@ -260,7 +268,8 @@ In Phase 2, `--diag` calls `GetSidetone` / `SetSidetone` / `GetSidetone` directl
 - **Resume** (`PBT_APMRESUMEAUTOMATIC`) while connected: `applying` and `RequestApply()`.
 - **"Set sidetone off again":** `applying` and `RequestApply()`.
 
-**Closing while the menu is open.** The menu runs inside `Tray::PopUpMenu`, further up the call stack, so `WM_CLOSE` (taskkill, install, uninstall) can't destroy the window right then. It closes the menu (`EndMenu`) and posts itself again.
+**Closing while the menu or a dialog is open.** The menu runs inside `Tray::PopUpMenu`, and the Uninstall dialog inside `App::Uninstall`, further up the call stack. So `WM_CLOSE` (taskkill, install, uninstall) can't destroy the window right then. It closes the menu (`EndMenu`) or the dialog (`WM_CLOSE`, the same as Cancel), and posts itself again. A click on the tray icon while the dialog is open brings the dialog to the front instead of opening a second menu.
+- `taskkill` without `/f` sends its `WM_CLOSE` to the visible dialog only, so it cancels the dialog and the app keeps running. Install and uninstall post to the hidden window, which closes both.
 
 **Worker.** The `Worker` class owns one thread (`std::jthread`), an auto-reset event `wake`, and a manual-reset event `stop`:
 ```
@@ -283,38 +292,45 @@ States, menu, tooltip and icon dimming follow the spec's table.
 
 **Locations.**
 - **Install dir:** `%LOCALAPPDATA%\Programs\Sidetone Off\SidetoneOff.exe` (`FOLDERID_UserProgramFiles`).
-- **Run value:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Sidetone Off` = `"<install dir>\SidetoneOff.exe"`.
+- **Run value:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Sidetone Off` = `"<install dir>\SidetoneOff.exe" --autostart` (M14).
 - **Start Menu shortcut:** `FOLDERID_Programs\Sidetone Off.lnk`, created with `IShellLinkW` (`ole32`, `uuid`).
 - **Uninstall entry:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\SidetoneOff`, which makes it show in Settings › Apps › Installed apps. Values:
   - `DisplayName` "Sidetone Off", `DisplayIcon` (`<exe>,0`), `DisplayVersion`, `Publisher` "Giancarlo Dalle Mole" (M5)
   - `InstallLocation`, `InstallDate`, `EstimatedSize`
   - `UninstallString` = `"<exe>" --uninstall`
   - `NoModify=1`, `NoRepair=1`
-- **App state:** `HKCU\Software\SidetoneOff` (the first-run flag).
+- **App settings:** `HKCU\Software\SidetoneOff`. Empty in this version (the next one keeps its RGB colors there), but uninstalling deletes it.
+- **Startup switch:** when you turn the app off in Settings › Apps › Startup, Windows stores that as the `Sidetone Off` value under `HKCU\…\Explorer\StartupApproved\Run`. Uninstalling deletes it too.
+
+**"Installed" means the same file.** Whether this process runs the installed exe is decided by file identity (volume serial and file ID), not by comparing path strings, so case, short names and links don't matter.
 
 **Entry points.**
 
 | Launch | Behavior |
 |---|---|
-| No args, exe **outside** the install dir | Confirmation dialog (M3): "Install Sidetone Off?", or "Update Sidetone Off to x.y?" when already installed, with **Install** / Cancel. Install → install steps. Cancel → exit. |
-| `--install` | Install steps with no dialog. Used by `build.ps1 -Install`, like `build.sh`. |
-| No args, exe **inside** the install dir | Tray app: mutex, tray, first-run balloon once |
-| `--uninstall` | From Settings › Apps. **No dialog** (M4). Uninstall steps. |
-| Tray › Uninstall… | Spec's confirmation dialog, default Cancel. Then the uninstall steps in-process. |
+| No args, exe **outside** the install dir | Confirmation dialog (M3): "Install Sidetone Off?" with **Install** / Cancel, or "Update Sidetone Off to x.y.z?" with **Update** / Cancel when already installed. Yes → install steps; an error shows in a dialog. Cancel → exit. |
+| `--install` | Install steps with no dialog. Errors are only logged, with exit code 1. Used by `build.ps1 -Install`, like `build.sh`. |
+| No args, exe **inside** the install dir | Tray app: mutex, tray, and the "Sidetone Off is running" notice (M14) |
+| `--autostart`, exe **inside** the install dir | The Run value, at sign-in: the tray app, without the notice. From anywhere else it counts as unknown arguments. |
+| `--uninstall` | From Settings › Apps. **No dialog** (M4), except to show an error. Uninstall steps. |
+| Tray › Uninstall… | Spec's confirmation dialog, default Cancel. Uninstall steps 2–3 run in the app, and the app ends. Once its worker has stopped and the tray icon is gone, `wWinMain` runs step 4. |
 | `--diag` | Section 5.5 |
 | Any other arguments | Logged, then exit code 2, with no UI |
 
 **Install steps.**
 1. Close the running instance: find its window, `PostMessage(WM_CLOSE)`, wait up to 5 s on its process, and `TerminateProcess` if it is still there.
-2. Create the dir and copy the exe. Skip the copy if this exe is already the installed one.
-3. Write the Run value, the shortcut and the Uninstall key.
+2. Create the dir and copy the exe. Skip the copy if this exe is already the installed one. A copy that finds the old exe still in use is retried for up to 2 s.
+3. Write the Run value, the shortcut and the Uninstall key. If a step fails, the steps before it stay done, and installing again finishes the job.
 4. Launch the installed exe.
 5. Exit.
 
 **Uninstall steps.**
 1. Close the running instance, unless we *are* that instance (tray uninstall).
-2. Delete the Run value, the Uninstall key, `HKCU\Software\SidetoneOff` and the shortcut.
-3. Spawn a hidden `cmd.exe /d /c ping -n 3 127.0.0.1 >nul & del /f /q "<exe>" & rd "<dir>"`, then exit.
+2. Delete the Run value, the StartupApproved value, the Uninstall key, `HKCU\Software\SidetoneOff` and the shortcut. Anything already gone is fine.
+3. (The tray uninstall ends the app here.)
+4. Delete the files:
+   - If this process *is* the installed exe, it can't delete itself. It spawns a hidden `cmd.exe /d /c "ping -n 3 127.0.0.1 >nul & del /f /q "<exe>" & rd "<dir>""`, with full paths to `cmd` and `ping` and the system folder as its working folder, then exits.
+   - Otherwise (`--uninstall` from another copy) it deletes them directly.
    - `rd` without `/s` only removes an **empty** folder.
    - No alternate-data-stream self-delete tricks.
 
@@ -328,20 +344,28 @@ As in the spec, with these specifics:
   - After an Explorer restart it comes back wherever Windows keeps it: the ^ overflow until you pin it.
   - Phase 3 uses the stock `IDI_APPLICATION` icon as a placeholder.
 - **Menu:** the same menu on a left click (`NIN_SELECT`), a right click (`WM_CONTEXTMENU`) and the keyboard (`NIN_KEYSELECT`). It is built from the current state each time it opens.
+  - The status line is always disabled: it shows the state and can't be clicked, as on the Mac (section 3, #22).
   - **Live, like the Mac menu.** If the state changes while the menu is open, it closes and reopens in place with the new state. An open Win32 menu can't be resized, and the status line changes length.
-- **Glyph:** Segoe Fluent Icons `U+E7F6`, with Segoe MDL2 Assets as fallback (`tray_icon.*`).
-  - A font counts only if it has the glyph. GDI quietly puts Arial in place of a missing font.
-  - Size: `GetSystemMetricsForDpi(SM_CXSMICON, dpi)`, with the DPI of the taskbar window (`Shell_TrayWnd`), which is that of its monitor. Without Explorer, the system DPI.
-  - Drawn with GDI at an em size equal to the icon size, at (0, 0). Both fonts' em box is exactly the icon (ascent = em, no descent, measured), so the font's own hinting and centering apply.
-  - Drawn white on black with grayscale smoothing. The brightness becomes the alpha of a 32-bpp `HICON` with **straight alpha** (section 3, #16).
+- **Glyph (M12):** an original headphones drawing: a rounded headband (a half circle continued straight down) with filled, rounded ear cups. It's laid out on a 24-unit grid with a 2-unit stroke (M8), and defined once, in `make-icon.ps1`.
+- **Tray icon** (`tray_icon.*`):
+  - `make-icon.ps1` draws the glyph white on transparent into `build/tray.ico`, at the small-icon size of each display scale from 100% to 400% (16, 20, 24, 28, 32, 36, 40, 48, 56, 64 px). It is embedded as `IDI_TRAY`.
+  - Size: `GetSystemMetricsForDpi(SM_CXSMICON, dpi)`, with the DPI of the taskbar window (`Shell_TrayWnd`), which is that of its monitor. Without Explorer, the system DPI. `LoadImageW` picks that image, or scales the nearest one.
+  - Only the glyph's alpha is kept. It becomes the alpha of a 32-bpp `HICON` with **straight alpha** (section 3, #16).
   - Color follows `SystemUsesLightTheme`: white on a dark taskbar, black on a light one. Disconnected shows it at 40% opacity.
-  - The normal and dimmed icons are drawn once and kept. They're redrawn only if the icon size or the theme really changed, which is checked on any `WM_SETTINGCHANGE`, `WM_DPICHANGED`, `WM_DISPLAYCHANGE` and `TaskbarCreated`. Explorer also sends `TaskbarCreated` when the taskbar's DPI changes.
-  - If drawing fails (logged), the stock application icon keeps the tray icon, and its menu, there.
+  - The normal and dimmed icons are made once and kept. They're remade only if the icon size or the theme really changed, which is checked on any `WM_SETTINGCHANGE`, `WM_DPICHANGED`, `WM_DISPLAYCHANGE` and `TaskbarCreated`. Explorer also sends `TaskbarCreated` when the taskbar's DPI changes.
+  - If that fails (logged), the stock application icon keeps the tray icon, and its menu, there.
+- **Tooltip (M13):** two lines, "Sidetone Off" and the status.
+  - Every `Shell_NotifyIconW` call sends the icon, the tooltip and `NIF_SHOWTIP`. With `NOTIFYICON_VERSION_4`, Windows hides the standard tooltip without that flag.
+  - The tooltip is sent again right after `NIM_SETVERSION`: the one sent with `NIM_ADD`, before the version was set, doesn't count. Without this, it only appeared after the first status change (found in the Phase 5 review).
 - **App icon:** `make-icon.ps1` → `build/app.ico`, embedded in the exe as its first icon (`IDI_APP` in `res/resource.h`). Sizes 16, 20, 24, 32, 48, 64 and 256.
-  - From 32 px: the spec design (a tile, the gradient `#665CF2` → `#3D2EB2`, a white glyph), with the glyph **thickened by a light outline**, 3% of its em size, to match the Mac's semibold weight (M8).
-  - At 16, 20 and 24 px: the small-size layout (M11).
-  - 48, 64 and 256 px are stored as PNG, the others as 32-bit bitmaps with a 1-bit mask (section 3, #17). The script writes the `.ico` itself, because System.Drawing can't save a multi-size icon with alpha.
-- **First-run balloon:** the spec's text, shown once.
+  - The spec's design, as on the Mac, at every size (M11): a tile filling 80% of the canvas, the gradient `#665CF2` → `#3D2EB2`, and the white glyph at about half the tile.
+  - 48, 64 and 256 px are stored as PNG, the others as 32-bit bitmaps with a 1-bit mask (section 3, #17). `tray.ico` is all PNG. The script writes the `.ico` files itself, because System.Drawing can't save a multi-size icon with alpha.
+- **"Sidetone Off is running" notice:** the spec's first-run text, split into a title, "Sidetone Off is running", and the rest as its text (section 3, #18).
+  - Shown with `NIF_INFO` and the app icon (`LoadIconMetric`, large). Windows 11 shows it as a toast; the tray glyph would be white on white there.
+  - Shown on every start except the one at sign-in (`--autostart`) (M14).
+- **Dialogs** are `TaskDialogIndirect`, titled "Sidetone Off": install and update with the app icon; uninstall with the warning icon, Cancel as default; errors with the error icon.
+  - Every one closes with Esc, Alt+F4 or `WM_CLOSE` (`TDF_ALLOW_DIALOG_CANCELLATION`).
+  - An error names the failed step and Windows' reason, e.g. "Couldn't copy the app into its folder: Access is denied. (error 5)".
 
 ### 5.5 `--diag`
 Runs without the mutex or tray, so it can run while the tray instance is running. It makes one attempt with no retries. The report lists:
@@ -371,7 +395,7 @@ mac/                   Mac app (unchanged)
 thoughts/              spec + plan
 windows/
   build.ps1            build (+ -Install); fail fast
-  make-icon.ps1        build/app.ico via System.Drawing
+  make-icon.ps1        the glyph (M12) → build/app.ico and build/tray.ico, via System.Drawing
   README.md
   src/
     main.cpp           wWinMain, arg dispatch, mutex
@@ -383,7 +407,7 @@ windows/
     worker.cpp/.h      Worker: thread, coalescing, retries
     devices.cpp/.h     DeviceWatcher: notifications, enumeration, counting
     tray.cpp/.h        Tray: the icon, menu, balloon
-    tray_icon.cpp/.h   the tray glyph: taskbar size and theme, GDI rendering
+    tray_icon.cpp/.h   the tray icon: taskbar size and theme, the glyph from tray.ico recolored
     install.cpp/.h     install / update / uninstall (free functions)
     diag.cpp/.h        --diag (free function)
     strings.h          every UI string in one place (backport / Linux)
@@ -411,7 +435,7 @@ windows/
      - Run it. A failure stops the build, so no new `SidetoneOff.exe` is produced.
 8. Check `$LASTEXITCODE` after every tool.
 9. Print the exe size, and fail if it is over 300 KB.
-10. With `-Install`, run `build\SidetoneOff.exe --install`.
+10. With `-Install`, run `build\SidetoneOff.exe --install`. This runs after the environment is restored, so the installed app doesn't start inside the build tools' environment. It waits for that one process (`Process.WaitForExit`), not with `Start-Process -Wait`, which also waits for the tray app it starts.
 
 Every build starts from an empty `build/`. If the exe is running from it, the build stops with a clear message. When it finishes, the script restores the caller's environment, because `Enter-VsDevShell` changes it and repeated runs in the same terminal would otherwise pile up.
 
@@ -524,6 +548,7 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 - `win32.h`: RAII wrappers for icons, GDI objects and memory DCs.
 - `make-icon.ps1` → `app.ico` with sizes 16/20/24/32/48/64/256, the glyph thickened (M8), and the small-size layout (M11). It's embedded via `rc` (`res/resource.h`).
 - Plan: M11, section 3 #15–#17, and 5.4.
+- (The Phase 5 review replaced the Segoe glyph with a drawn one (M12) and reverted the small-size layout (M11).)
 
 **My checks**
 - The exe's icon group has every size, and `LoadImage` loads each one at its exact size.
@@ -541,19 +566,35 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 ### Phase 5: Self-install, update, uninstall, first run
 **Changes**
-- `install.*`.
+- `install.*`: the install and uninstall steps, and the dialogs.
 - The `--install` / `--uninstall` dispatch, and the confirmation dialog for an exe run from outside the install dir (M3).
-- Tray › Uninstall… with its dialog.
-- The first-run balloon.
+- Tray › Uninstall… with its dialog. `WM_CLOSE` while it is open closes it first (5.2).
+- The first-run notice.
 - `build.ps1 -Install`.
+- `win32.h`: `UniqueHkey`. `strings.h`: the new UI text and the install names.
+- Fixes from your review (M11–M14):
+  - The drawn glyph, in `tray.ico` and the app icon.
+  - The app icon back to the Mac layout.
+  - The tooltip on two lines, shown from the start.
+  - "Logitech G635 connected".
+  - The notice on every start but sign-in (`--autostart`).
+  - The menu's status line always disabled.
 
 **My checks**
-- `--install` → the folder, Run value, shortcut and Uninstall key (Publisher M5) exist, checked with `reg query` and a dir listing.
-- `--uninstall` → all of them are gone, with no dialog (M4).
-- Reinstall, then an update while the app is running → the old PID exits and a new PID runs.
+- `build.ps1 -Install` → the folder, Run value (with `--autostart`), shortcut and Uninstall key (Publisher M5) exist, the app runs from the install folder, and the notice was shown.
+- An update while the app is running → the old PID exits and a new PID runs, and shows the notice.
+- Quit, then a start with no arguments shows the notice; a start with `--autostart` doesn't; `--autostart` from another copy exits with code 2.
+- Tray and app icon previews with the drawn glyph, and the icon group in the exe.
+- A second launch of the installed exe exits at once.
+- The update dialog and the Uninstall dialog, captured as images. Enter in the Uninstall dialog cancels.
+- `WM_CLOSE` to the app while the Uninstall dialog is open → the dialog closes, and the app exits.
+- Tray › Uninstall… → Uninstall → the registration is gone at once, the exe and folder about 2 s later.
+- `--uninstall` as Settings runs it, while the app is running → all of them are gone, with no dialog (M4).
+- `--uninstall` from another copy also removes a StartupApproved value, and deletes the files directly.
+- Defender's detection history stays empty.
 
 **You**
-1. Double-click install → confirmation dialog → the balloon shows once.
+1. Double-click install → confirmation dialog → the notice shows once.
 2. Installed apps shows the entry with the icon and "Giancarlo Dalle Mole", and Startup apps lists it.
 3. Tray › Uninstall… → Enter cancels, the button confirms.
 4. Settings › Apps › Uninstall while the app is running.
@@ -581,7 +622,7 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 1. `build.ps1` from a clean clone → `build\SidetoneOff.exe`, no warnings, all unit tests pass, < 300 KB. [P1, P2]
 2. `--diag` with the G635 → Col03 / `0xFF43`/`0x0202`, out 20, index 7, after-level 0, exit 0. [P2]
-3. Double-click the exe → confirmation dialog → tray icon. The first-run balloon shows once. The app shows in Installed apps (icon, Publisher) and in Startup apps. [P5]
+3. Double-click the exe → confirmation dialog → tray icon and the "Sidetone Off is running" notice. Quit and reopen → the notice again; it doesn't show at sign-in. The app shows in Installed apps (icon, Publisher) and in Startup apps. [P5]
 4. Plug / unplug → the status and icon change. After plugging in, `--diag` reads 0, and with Recording open there's no sidetone. [P3]
 5. Restart Windows with the headset connected → sidetone off. [P5]
 6. Sleep → resume while connected → sidetone off. [P3]
@@ -608,5 +649,6 @@ If anything fails here, it gets fixed before Phase 3 (spec).
   - native HID (IOKit `IOHIDDevice`) instead of `headsetcontrol`. The same `Transport` / `Device` shape maps to a Swift protocol and a class;
   - read-back;
   - resume trigger;
-  - HID-arrival trigger.
-- **Linux:** reuse `hidpp.*` and `profile.*`, with a `HidrawTransport` (`hidraw` + udev monitor), StatusNotifierItem for the tray, and its own glyph (the Segoe glyph is Windows-only).
+  - HID-arrival trigger;
+  - the app icon with the drawn glyph (M12). Apple's terms don't allow SF Symbols in app icons, even on the Mac. The menu-bar icon can stay SF Symbols.
+- **Linux:** reuse `hidpp.*` and `profile.*`, with a `HidrawTransport` (`hidraw` + udev monitor), StatusNotifierItem for the tray, and the drawn glyph (M12), which is ours and works on any platform.
