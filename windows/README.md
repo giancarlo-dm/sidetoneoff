@@ -6,7 +6,7 @@ SidetoneOff turns off the sidetone of a Logitech G635 headset (your own voice in
 
 ## Install
 
-1. Run `SidetoneOff.exe` and choose **Install**.
+1. Download [`SidetoneOff-windows-x64.exe`](https://github.com/giancarlo-dm/sidetoneoff/releases/latest/download/SidetoneOff-windows-x64.exe) from the [latest release](https://github.com/giancarlo-dm/sidetoneoff/releases/latest), or build `SidetoneOff.exe` yourself (see [Build from source](#build-from-source)). Run it and choose **Install**.
 2. It installs for your account only, in `%LOCALAPPDATA%\Programs\SidetoneOff`, adds itself to startup and to the Start menu, and starts. A notice says "SidetoneOff is running".
 3. Windows 11 puts new tray icons in the **^** overflow. To keep the headphones icon on the taskbar: Settings › Personalization › Taskbar › Other system tray icons › SidetoneOff.
 
