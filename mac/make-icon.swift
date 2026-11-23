@@ -1,4 +1,4 @@
-// Renders the Sidetone Off app icon into an .iconset folder for iconutil.
+// Renders the SidetoneOff app icon into an .iconset folder for iconutil.
 // Usage: swift make-icon.swift <output.iconset>
 
 import AppKit

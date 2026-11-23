@@ -113,7 +113,7 @@ Running `windows\build\SidetoneOff.exe` with no arguments offers to install it, 
 - It reacts to Windows' device notifications (the headset's USB device and HID interfaces arriving) and to waking from sleep. It never polls.
 - The protocol facts come from [HeadsetControl](https://github.com/Sapd/HeadsetControl) (GPL-3.0); none of its code is used.
 
-The design and every decision behind it are in [`thoughts/2026-11-13_1-windows-0.0/plan.md`](../thoughts/2026-11-13_1-windows-0.0/plan.md).
+The design and every decision behind it are in [`claude/2026-11-13_1-windows-0.0/plan.md`](../claude/2026-11-13_1-windows-0.0/plan.md).
 
 ## What it changes on your PC
 

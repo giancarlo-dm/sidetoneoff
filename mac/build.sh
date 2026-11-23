@@ -1,8 +1,8 @@
 #!/bin/zsh
-# Builds "Sidetone Off.app", installs it in /Applications and opens it.
+# Builds "SidetoneOff.app", installs it in /Applications and opens it.
 set -euo pipefail
 
-APP_NAME="Sidetone Off"
+APP_NAME="SidetoneOff"
 EXECUTABLE="SidetoneOff"
 SRC="${0:A:h}"
 APP="$SRC/build/$APP_NAME.app"

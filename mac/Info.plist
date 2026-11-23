@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key>
-  <string>com.giancarlo.sidetone-off</string>
+  <string>com.giancarlo.sidetoneoff</string>
   <key>CFBundleName</key>
-  <string>Sidetone Off</string>
+  <string>SidetoneOff</string>
   <key>CFBundleDisplayName</key>
-  <string>Sidetone Off</string>
+  <string>SidetoneOff</string>
   <key>CFBundleExecutable</key>
   <string>SidetoneOff</string>
   <key>CFBundleIconFile</key>

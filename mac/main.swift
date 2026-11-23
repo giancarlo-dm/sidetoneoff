@@ -1,4 +1,4 @@
-// Sidetone Off: turns off the Logitech G635's sidetone whenever the headset is connected.
+// SidetoneOff: turns off the Logitech G635's sidetone whenever the headset is connected.
 // Lives in the menu bar and starts at login. Uninstall it from its menu, or drag the app to the Trash.
 
 import AppKit
@@ -13,7 +13,7 @@ enum Config {
 
 enum Headset {
     static var connectedCount = 0
-    static let worker = DispatchQueue(label: "com.giancarlo.sidetone-off.worker")
+    static let worker = DispatchQueue(label: "com.giancarlo.sidetoneoff.worker")
 }
 
 // MARK: - Menu bar
@@ -30,14 +30,14 @@ final class MenuBar: NSObject {
 
     private override init() {
         super.init()
-        let icon = NSImage(systemSymbolName: "headphones", accessibilityDescription: "Sidetone Off")
+        let icon = NSImage(systemSymbolName: "headphones", accessibilityDescription: "SidetoneOff")
         icon?.isTemplate = true
         item.button?.image = icon
-        item.button?.toolTip = "Sidetone Off"
+        item.button?.toolTip = "SidetoneOff"
 
-        let uninstall = NSMenuItem(title: "Uninstall Sidetone Off…",
+        let uninstall = NSMenuItem(title: "Uninstall SidetoneOff…",
                                    action: #selector(MenuBar.uninstallClicked), keyEquivalent: "")
-        let quit = NSMenuItem(title: "Quit Sidetone Off",
+        let quit = NSMenuItem(title: "Quit SidetoneOff",
                               action: #selector(MenuBar.quitClicked), keyEquivalent: "q")
         for target in [reapply, uninstall, quit] { target.target = self }
         statusLine.isEnabled = false
@@ -69,7 +69,7 @@ final class MenuBar: NSObject {
     @objc private func uninstallClicked() {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Uninstall Sidetone Off?"
+        alert.messageText = "Uninstall SidetoneOff?"
         alert.informativeText = "It will be removed from your login items and moved to the Trash. "
             + "Your headset's sidetone won't be turned off automatically anymore."
         let uninstall = alert.addButton(withTitle: "Uninstall")
@@ -84,7 +84,7 @@ final class MenuBar: NSObject {
             try FileManager.default.trashItem(at: Bundle.main.bundleURL, resultingItemURL: nil)
         } catch {
             try? SMAppService.mainApp.register()
-            showAlert("Couldn't uninstall Sidetone Off", error.localizedDescription)
+            showAlert("Couldn't uninstall SidetoneOff", error.localizedDescription)
             return
         }
         exit(0)
@@ -110,16 +110,16 @@ func runHeadsetcontrol() -> Bool {
         do {
             try process.run()
         } catch {
-            NSLog("Sidetone Off: can't run \(Config.headsetcontrol): \(error)")
+            NSLog("SidetoneOff: can't run \(Config.headsetcontrol): \(error)")
             return false
         }
         process.waitUntilExit()
         if process.terminationStatus == 0 {
-            NSLog("Sidetone Off: sidetone disabled (attempt \(attempt))")
+            NSLog("SidetoneOff: sidetone disabled (attempt \(attempt))")
             return true
         }
     }
-    NSLog("Sidetone Off: headsetcontrol failed after 5 attempts")
+    NSLog("SidetoneOff: headsetcontrol failed after 5 attempts")
     return false
 }
 
@@ -171,7 +171,7 @@ func watchHeadset(_ port: IONotificationPortRef?, _ notification: String,
     let result = IOServiceAddMatchingNotification(
         port, notification, matching as CFDictionary, callback, nil, &iterator)
     guard result == KERN_SUCCESS else {
-        NSLog("Sidetone Off: couldn't register for USB notifications (\(result))")
+        NSLog("SidetoneOff: couldn't register for USB notifications (\(result))")
         exit(1)
     }
     return iterator
@@ -192,11 +192,11 @@ func registerAtLogin() {
     guard service.status != .enabled else { return }
     do {
         try service.register()
-        showAlert("Sidetone Off is running",
+        showAlert("SidetoneOff is running",
                   "It starts automatically when you log in and turns off your headset's sidetone whenever it's connected.\n\n"
                   + "Look for the headphones icon in the menu bar. From there you can check its status, quit it, or uninstall it.")
     } catch {
-        showAlert("Couldn't add Sidetone Off to login items", error.localizedDescription)
+        showAlert("Couldn't add SidetoneOff to login items", error.localizedDescription)
     }
 }
 

@@ -14,7 +14,7 @@ Answered 2026-11-21 unless noted.
 
 | # | Question | Decision |
 |---|---|---|
-| B1 | Repository scope | **One repo at the workspace root** (`mac/`, `windows/`, `thoughts/`), branch `main`, local only. `mac/` has no earlier history, so it goes into the first commit like any other file. |
+| B1 | Repository scope | **One repo at the workspace root** (`mac/`, `windows/`, `claude/`), branch `main`, local only. `mac/` has no earlier history, so it goes into the first commit like any other file. The plans' folder was `thoughts/` until 2026-11-23, when you renamed it `claude/`. |
 | M1 | Who commits, and when | **You always commit, by hand.** At the end of each phase I hand over the commit title and description. I never stage or commit. |
 | M2 | Write succeeds but the read-back times out | **The attempt counts as failed** and is retried. "Sidetone off" appears only when the headset confirms 0. |
 | M3 | Exe run from outside the install dir | **Install dialog asking for confirmation**: Install / Cancel. |
@@ -36,7 +36,7 @@ Answered 2026-11-21 unless noted.
 | M15 | Log window: where the history lives (asked 2026-11-23, after Phase 5) | **In memory**: the last 500 lines since the app started, lost on Quit or restart. No log files, as in the spec. You asked to add the phase and continue, so this and M16–M17 are my recommendations. |
 | M16 | Log window: which lines | **The same lines as the debug log**, each after its date and time. One source of messages; some lines are technical (e.g. the HID device path). |
 | M17 | Log window: dark mode | **No.** Standard Windows controls, which are light-themed; dark mode needs undocumented APIs. |
-| M18 | The app's name (Phase 7: you noted "the app name is SidetoneOff"; the spec and the Mac app display "Sidetone Off") | **"SidetoneOff", one word, everywhere on Windows** (answered 2026-11-23): dialogs, tooltip, notice, log window title, Installed apps, Start menu shortcut, install folder, Run value, version info, debug-log prefix and README. Names that already were one word stay (exe, window classes, mutex, `Uninstall\SidetoneOff`, `Software\SidetoneOff`). The repo stays `sidetone-off`. The Mac app still displays "Sidetone Off" until it's renamed too (section 8). |
+| M18 | The app's name (Phase 7: you noted "the app name is SidetoneOff"; the spec and the Mac app display "Sidetone Off") | **"SidetoneOff", one word, everywhere on Windows** (answered 2026-11-23): dialogs, tooltip, notice, log window title, Installed apps, Start menu shortcut, install folder, Run value, version info, debug-log prefix and README. Names that already were one word stay (exe, window classes, mutex, `Uninstall\SidetoneOff`, `Software\SidetoneOff`). The repo stays `sidetone-off`. **The Mac app is renamed too** (2026-11-23; it isn't published, so nothing depends on the old names): `CFBundleName` and `CFBundleDisplayName` "SidetoneOff", bundle ID `com.giancarlo.sidetoneoff` (and its queue label), `build.sh` building `SidetoneOff.app`, and the strings and `NSLog` prefix in `main.swift`. On a Mac with the old "Sidetone Off.app", uninstall it from its menu first: `build.sh` only replaces `SidetoneOff.app`, and the old app's login item would keep starting it. |
 
 Decisions made earlier in the conversation (installer, detection, read-back, Quit…) are in section 3.
 
@@ -394,7 +394,7 @@ Runs without the mutex or tray, so it can run while the tray instance is running
 ```
 .gitignore  .gitattributes
 mac/                   Mac app (unchanged)
-thoughts/              spec + plan
+claude/                spec, plan and session summary (thoughts/ until 2026-11-23)
 windows/
   build.ps1            build (+ -Install); fail fast
   make-icon.ps1        the glyph (M12) → build/app.ico and build/tray.ico, via System.Drawing
@@ -722,6 +722,6 @@ My checks ran on the 1.0.0 build, on this PC, with the G635 connected and Defend
   - read-back;
   - resume trigger;
   - HID-arrival trigger;
-  - the app icon with the drawn glyph (M12). Apple's terms don't allow SF Symbols in app icons, even on the Mac. The menu-bar icon can stay SF Symbols;
-  - the display name "SidetoneOff" (M18): `CFBundleName` and `CFBundleDisplayName` in `Info.plist`, the bundle `SidetoneOff.app`, and the strings in `main.swift`.
+  - the app icon with the drawn glyph (M12). Apple's terms don't allow SF Symbols in app icons, even on the Mac. The menu-bar icon can stay SF Symbols.
+  - (The name "SidetoneOff" is done already: M18.)
 - **Linux:** reuse `hidpp.*` and `profile.*`, with a `HidrawTransport` (`hidraw` + udev monitor), StatusNotifierItem for the tray, and the drawn glyph (M12), which is ours and works on any platform.
