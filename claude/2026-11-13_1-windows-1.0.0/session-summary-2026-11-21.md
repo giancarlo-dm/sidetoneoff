@@ -1,4 +1,4 @@
-# Sidetone Off — Windows 0.0 — Session summary (2026-11-21)
+# Sidetone Off — Windows 1.0.0 — Session summary (2026-11-21)
 
 This is a record of the first working session on the Windows port: what was learned, decided and built, and where to pick up. It doesn't repeat the plan. Decisions and design are in [plan.md](plan.md), which wins over [spec.md](spec.md) where they differ.
 
