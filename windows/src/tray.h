@@ -23,6 +23,7 @@ enum class MenuCommand : UINT {
     None = 0,
     Status,    // the status line: always disabled, so it can't be picked
     SetAgain,  // "Set sidetone off again"
+    ShowLog,
     Uninstall,
     Quit,
 };

@@ -43,6 +43,7 @@ std::unique_ptr<App> App::Create(HINSTANCE instance, bool showNotice) {
     app->taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
 
     app->tray_ = std::make_unique<Tray>(app->window_, kTrayMessage);
+    app->logWindow_ = std::make_unique<LogWindow>(instance);
     app->worker_ = Worker::Start(app->window_, kWorkerResultMessage, kProfile);
     app->devices_ = DeviceWatcher::Create(app->window_);
     if (!app->worker_ || !app->devices_) return nullptr;  // logged by them; ~App cleans up
@@ -116,7 +117,9 @@ LRESULT App::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         DestroyWindow(window_);
         return 0;
     case WM_DESTROY:
-        // Tear down while the window still exists: stop listening, stop the worker, remove the icon.
+        // Tear down while the window still exists: close the log window, stop listening, stop the worker, remove
+        // the icon.
+        logWindow_.reset();
         devices_.reset();
         worker_.reset();
         tray_.reset();
@@ -173,6 +176,9 @@ void App::OnTrayEvent(UINT event, POINT anchor) {
     case MenuCommand::SetAgain:
         Log(L"set sidetone off again");
         TurnOffSidetone();
+        break;
+    case MenuCommand::ShowLog:
+        logWindow_->Show();
         break;
     case MenuCommand::Uninstall:
         Uninstall();

@@ -14,7 +14,7 @@ This is a minor blocker: I'll ask again, with this recommendation, before the ph
 
 | # | Question | Needed by | Recommendation |
 |---|---|---|---|
-| M9 | Release version | Phase 6 | Keep **0.1.0** during development and bump to **1.0.0** in Phase 6 once the release checklist passes, matching the Mac app's 1.0. |
+| M9 | Release version | Phase 7 | Keep **0.1.0** during development and bump to **1.0.0** in Phase 7 once the release checklist passes, matching the Mac app's 1.0. |
 
 ### Decisions
 
@@ -40,6 +40,9 @@ Answered 2026-11-21.
 | M12 | Tray and app icon glyph (Phase 5 review: the Segoe glyph looks square next to the Mac's rounded one) | **An original drawing**: a rounded headband with filled, rounded ear cups (variant B of the drawn prototypes), drawn by `make-icon.ps1` for both icons. The Mac's SF Symbols "headphones" can't ship on Windows: Apple licenses SF Symbols for Apple platforms only, and never in app icons. Windows' icon font has no rounder headphone. |
 | M13 | Tooltip and status wording (Phase 5 review) | **Tooltip on two lines**: "Sidetone Off", then the status. When sidetone is off, the status is just "Logitech G635 connected", in the tooltip and in the menu. |
 | M14 | When "Sidetone Off is running" shows (Phase 5 review: it didn't after an update, or after Quit and reopening) | **On every start you make** (install, update, Start menu, double-click), **not at sign-in**: the Run value passes `--autostart`, which skips it. A start while the app is already running still does nothing (spec). |
+| M15 | Log window: where the history lives (asked 2026-11-23, after Phase 5) | **In memory**: the last 500 lines since the app started, lost on Quit or restart. No log files, as in the spec. You asked to add the phase and continue, so this and M16–M17 are my recommendations. |
+| M16 | Log window: which lines | **The same lines as the debug log**, each after its date and time. One source of messages; some lines are technical (e.g. the HID device path). |
+| M17 | Log window: dark mode | **No.** Standard Windows controls, which are light-themed; dark mode needs undocumented APIs. |
 
 Decisions made earlier in the conversation (installer, detection, read-back, Quit…) are in section 3.
 
@@ -93,6 +96,7 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 | 20 | Tooltip and status | Tooltip `Sidetone Off — <status>`; "… connected — sidetone off" | Tooltip on two lines; "Logitech G635 connected" when sidetone is off (M13) | "Sidetone off" twice in one line read oddly. |
 | 21 | Run value | `"<exe>"` | `"<exe>" --autostart` | Tells the start at sign-in apart, so it shows no notice (M14). |
 | 22 | Menu status line | Grayed while disconnected, otherwise normal with a click that does nothing | **Always disabled** (grayed, not clickable) | It's a status, not a command (your Phase 5 review). The Mac's status line is always disabled too. |
+| 23 | Logging | `OutputDebugStringW` only, no log files | Also a **log window** (Tray › Show log) with the history since the app started. Still no files (M15). | Without a debug listener such as DebugView, there was no way to see what the app did. |
 
 UI strings follow `spec.md`. They differ from the Mac's on purpose.
 
@@ -181,6 +185,8 @@ HID: \\?\HID#VID_046D&PID_0A89&MI_03&Col01#…  UsagePage 0x000C Usage 0x0001  i
 | `CurrentTaskbarStyle`, `RenderTrayIcon` | free functions | Read the taskbar's icon size and theme; make the glyph's `HICON` in the taskbar's color | `tray_icon.*` | 4 |
 | `App` | class | The hidden window, its window proc and the state machine. Owns `Worker`, `DeviceWatcher` and `Tray`. | `app.*` | 3 |
 | `RunDiag`, install / uninstall | free functions | Nothing long-lived to own | `diag.*`, `install.*` | 2, 5 |
+| `LogHistory` | class, portable | The last 500 log lines, and which ones a reader has seen. Thread-safe. | `log_history.*` | 6 |
+| `LogWindow` | class | The log window, its text box and font. Owned by `App`. | `log_window.*` | 6 |
 
 **Errors.**
 - Device and Windows failures are values, not exceptions: anything that can fail returns `std::expected<T, Error>`.
@@ -345,6 +351,7 @@ As in the spec, with these specifics:
   - Phase 3 uses the stock `IDI_APPLICATION` icon as a placeholder.
 - **Menu:** the same menu on a left click (`NIN_SELECT`), a right click (`WM_CONTEXTMENU`) and the keyboard (`NIN_KEYSELECT`). It is built from the current state each time it opens.
   - The status line is always disabled: it shows the state and can't be clicked, as on the Mac (section 3, #22).
+  - From Phase 6, "Show log" sits above Uninstall… and Quit (5.7).
   - **Live, like the Mac menu.** If the state changes while the menu is open, it closes and reopens in place with the new state. An open Win32 menu can't be resized, and the status line changes length.
 - **Glyph (M12):** an original headphones drawing: a rounded headband (a half circle continued straight down) with filled, rounded ear cups. It's laid out on a 24-unit grid with a 2-unit stroke (M8), and defined once, in `make-icon.ps1`.
 - **Tray icon** (`tray_icon.*`):
@@ -412,11 +419,13 @@ windows/
     diag.cpp/.h        --diag (free function)
     strings.h          every UI string in one place (backport / Linux)
     version.h          the single version number (code + rc)
-    log.h              OutputDebugString helper ("Sidetone Off: …" lines)
+    log.cpp/.h         Log(): OutputDebugString ("Sidetone Off: …" lines) and the history
+    log_history.cpp/.h portable: LogHistory, the last 500 lines (Phase 6)
+    log_window.cpp/.h  LogWindow: Tray > Show log (Phase 6)
   res/
     app.rc  app.manifest  resource.h
   tests/
-    tests.cpp          FakeTransport + checks for hidpp (and profile, from Phase 3)
+    tests.cpp          FakeTransport + checks for hidpp (and profile, from Phase 3; log_history, from Phase 6)
 ```
 
 **`build.ps1`.**
@@ -431,7 +440,7 @@ windows/
    - The manifest is the only source of the UAC level.
    - **Unit tests (M10)** run before this link:
      - Compile `tests/tests.cpp` with the same flags.
-     - Link it with the portable objects (`$TestedSources`: `hidpp` now, `profile` from Phase 3) into the console exe `build/SidetoneOffTests.exe`.
+     - Link it with the portable objects (`$TestedSources`: `hidpp` now, `profile` from Phase 3, `log_history` from Phase 6) into the console exe `build/SidetoneOffTests.exe`.
      - Run it. A failure stops the build, so no new `SidetoneOff.exe` is produced.
 8. Check `$LASTEXITCODE` after every tool.
 9. Print the exe size, and fail if it is over 300 KB.
@@ -440,6 +449,27 @@ windows/
 Every build starts from an empty `build/`. If the exe is running from it, the build stops with a clear message. When it finishes, the script restores the caller's environment, because `Enter-VsDevShell` changes it and repeated runs in the same terminal would otherwise pile up.
 
 Output goes to `windows/build/`, which git ignores.
+
+### 5.7 Log window (Phase 6)
+**History (M15, M16).**
+- Every `Log()` line also goes, after its date and time (`2026-11-23 14:02:12  `), into an in-memory `LogHistory` of the last 500 lines.
+- Each process keeps its own, and only the tray app's is shown. It covers the time since the app started, and there are still no log files.
+- `LogHistory` is portable (no Windows headers) and thread-safe, because the worker thread logs too. It numbers the lines, so a reader can ask for those added since the last one it saw. Unit tests cover the 500-line cap and reading from a cursor.
+
+**Window.**
+- Tray › **Show log** opens it. Choosing it again brings the open window to the front.
+- A resizable top-level window titled "Sidetone Off — Log", with the app icon. Its whole client area is a read-only, word-wrapped text box (a multiline EDIT control) with a vertical scroll bar, in Consolas 10 pt on a white background (M17).
+- Sized for its monitor's DPI when it opens, and resized, with a new font, on `WM_DPICHANGED`.
+- **Live:** each new line posts a message to the window, which appends the lines since its cursor.
+  - It follows new lines only if it was scrolled to the end, and keeps the reader's selection.
+  - The window can stay open for days. Once its text box holds 1000 lines, it is refilled with the history, which keeps the last 500. That bounds its memory too.
+- **Keys:** Esc closes it, Ctrl+A selects all, and Ctrl+C or the right-click menu copies.
+- Closing destroys the window, but the history stays.
+- `App` owns the `LogWindow`. Quit, an update or an uninstall closes it with the app.
+
+**Limits.**
+- Install, update and uninstall run in a separate short-lived process, so their steps aren't in the window. The new app's history starts at "started, version …".
+- `--diag` keeps its own one-time report.
 
 ---
 
@@ -602,9 +632,34 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 **Commit title.** `Phase 5: Install, update and uninstall without an installer`
 
-### Phase 6: README and release check
+### Phase 6: Log window
+Added 2026-11-23, after Phase 5, at your request. Design in 5.7.
+
 **Changes**
-- `windows/README.md`: build, install, uninstall, `--diag`, the mic-in-use note, troubleshooting.
+- `log_history.*` (portable): `LogHistory`, with unit tests, and added to `$TestedSources`.
+- `log.h` / `log.cpp`: `Log()` also records the line, with its time, and tells the log window.
+- `log_window.*`: `LogWindow`.
+- Tray › Show log. `App` owns the window.
+- Plan: M15–M17, section 3 #23, 5.7.
+
+**My checks**
+- The history's unit tests pass.
+- Open the window through the menu (by window messages) and capture it → the lines since the start, with their times.
+- A new line while it is open (e.g. a simulated resume) appears at the end.
+- Esc closes it. Quit, and an update (`--install`), with the window open → a clean exit.
+- Memory and CPU at idle after the window was opened and closed. Five open/close cycles leave the handle, GDI and USER object counts flat.
+
+**You**
+1. Tray › Show log → the history. Scroll, select, copy.
+2. Unplug and replug while it is open → the new lines appear.
+3. Resize it; if you have a second monitor with another scale, move it there.
+4. Esc closes it.
+
+**Commit title.** `Phase 6: Show the app's log in a window`
+
+### Phase 7: README and release check
+**Changes**
+- `windows/README.md`: build, install, uninstall, `--diag`, the log window, the mic-in-use note, troubleshooting.
 - Update the plan's status.
 
 **My checks**
@@ -614,11 +669,11 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 
 **You.** The hardware items of section 7.
 
-**Commit title.** `Phase 6: Document the Windows app and record the release check`
+**Commit title.** `Phase 7: Document the Windows app and record the release check`
 
 ---
 
-## 7. Release checklist (run in Phase 6; the phase where each item first appears is in brackets)
+## 7. Release checklist (run in Phase 7; the phase where each item first appears is in brackets)
 
 1. `build.ps1` from a clean clone → `build\SidetoneOff.exe`, no warnings, all unit tests pass, < 300 KB. [P1, P2]
 2. `--diag` with the G635 → Col03 / `0xFF43`/`0x0202`, out 20, index 7, after-level 0, exit 0. [P2]
@@ -629,10 +684,11 @@ If anything fails here, it gets fixed before Phase 3 (spec).
 7. Restart Explorer → the tray icon comes back. [P3]
 8. A second launch from the Start Menu → nothing happens. [P1/P5]
 9. Run a newer build while the app is running → update dialog, the old instance closes, the new one runs. [P5]
-10. Task Manager: < 5 MB, 0% CPU idle. [P6]
+10. Task Manager: < 5 MB, 0% CPU idle. [P7]
 11. Tray › Uninstall… (Enter = Cancel) → confirm → nothing left: folder, Run value, Uninstall key, `HKCU\Software\SidetoneOff`, shortcut. [P5]
 12. Settings › Apps › Uninstall while running → same result, no extra dialog. [P5]
-13. Defender on throughout → nothing in Protection history. [P5/P6]
+13. Defender on throughout → nothing in Protection history. [P5/P7]
+14. Tray › Show log → the history since the app started, with times. Unplug and replug while it is open → the new lines appear. [P6]
 
 ---
 

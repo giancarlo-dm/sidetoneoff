@@ -28,7 +28,7 @@ $TestObj  = Join-Path $Build 'obj-tests'
 $TestExe  = Join-Path $Build 'SidetoneOffTests.exe'
 
 # The portable sources the unit tests link against (no Windows code).
-$TestedSources = @('hidpp', 'profile')
+$TestedSources = @('hidpp', 'profile', 'log_history')
 
 $CompileFlags = @(
     '/nologo', '/std:c++23', '/permissive-', '/utf-8', '/W4', '/WX', '/sdl'

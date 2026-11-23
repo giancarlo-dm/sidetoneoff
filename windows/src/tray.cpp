@@ -163,6 +163,7 @@ MenuCommand Tray::TrackMenuOnce(POINT anchor) {
     AppendMenuW(menu.get(), MF_SEPARATOR, 0, nullptr);
     item(MenuCommand::SetAgain, ui::kMenuSetAgain, canSetAgain);
     AppendMenuW(menu.get(), MF_SEPARATOR, 0, nullptr);
+    item(MenuCommand::ShowLog, ui::kMenuShowLog, true);
     item(MenuCommand::Uninstall, ui::kMenuUninstall, true);
     item(MenuCommand::Quit, ui::kMenuQuit, true);
 

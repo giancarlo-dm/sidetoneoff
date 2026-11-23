@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "devices.h"
+#include "log_window.h"
 #include "tray.h"
 #include "worker.h"
 
@@ -53,4 +54,5 @@ private:
     std::unique_ptr<Tray> tray_;
     std::unique_ptr<Worker> worker_;
     std::unique_ptr<DeviceWatcher> devices_;
+    std::unique_ptr<LogWindow> logWindow_;  // Tray > Show log; its window exists only while open
 };

@@ -19,8 +19,12 @@ inline constexpr wchar_t kStatusFailed[] = L"Logitech G635 connected — couldn'
 
 // Tray menu commands.
 inline constexpr wchar_t kMenuSetAgain[] = L"Set sidetone off again";
+inline constexpr wchar_t kMenuShowLog[] = L"Show log";
 inline constexpr wchar_t kMenuUninstall[] = L"Uninstall…";
 inline constexpr wchar_t kMenuQuit[] = L"Quit";
+
+// The log window's title (Tray > Show log).
+inline constexpr wchar_t kLogTitle[] = L"Sidetone Off — Log";
 
 // The notice shown each time you start the app (not at sign-in; decision M14). Windows shows the app's name
 // above it.
@@ -60,6 +64,7 @@ namespace ids {
 
 // Install and uninstall find the running instance by this window class.
 inline constexpr wchar_t kWindowClass[] = L"SidetoneOff.Window";
+inline constexpr wchar_t kLogWindowClass[] = L"SidetoneOff.LogWindow";
 
 // Single-instance mutex: a second launch exits silently.
 inline constexpr wchar_t kMutex[] = L"Local\\SidetoneOff.SingleInstance";

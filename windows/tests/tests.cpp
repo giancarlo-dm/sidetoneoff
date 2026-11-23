@@ -1,5 +1,6 @@
-// Unit tests for the portable code (hidpp, profile), run by build.ps1 on every build. A FakeTransport stands
-// in for the headset, so no hardware is needed. No framework: each test is a function, CHECK records failures.
+// Unit tests for the portable code (hidpp, profile, log_history), run by build.ps1 on every build. A
+// FakeTransport stands in for the headset, so no hardware is needed. No framework: each test is a function,
+// CHECK records failures.
 
 #include <cstdio>
 #include <deque>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "hidpp.h"
+#include "log_history.h"
 #include "profile.h"
 
 namespace {
@@ -235,6 +237,45 @@ void EmptyProfileSendsNothing() {
     CHECK(transport.written.empty());
 }
 
+void LogHistoryReadsEverythingFromTheStart() {
+    LogHistory history(10);
+    history.Add(L"one");
+    history.Add(L"two");
+    std::uint64_t cursor = 0;
+    CHECK(history.TextSince(cursor) == L"one\r\ntwo\r\n");
+    CHECK(cursor == 2);
+}
+
+void LogHistoryReadsOnlyNewLines() {
+    LogHistory history(10);
+    history.Add(L"one");
+    std::uint64_t cursor = 0;
+    history.TextSince(cursor);
+    history.Add(L"two");
+    history.Add(L"three");
+    CHECK(history.TextSince(cursor) == L"two\r\nthree\r\n");
+    CHECK(history.TextSince(cursor).empty());  // nothing new since
+}
+
+void LogHistoryKeepsTheNewestLines() {
+    LogHistory history(3);
+    for (const wchar_t* line : {L"1", L"2", L"3", L"4", L"5"}) history.Add(line);
+    std::uint64_t cursor = 0;
+    CHECK(history.TextSince(cursor) == L"3\r\n4\r\n5\r\n");
+    CHECK(cursor == 5);
+}
+
+void LogHistorySkipsLinesDroppedSinceTheLastRead() {
+    LogHistory history(2);
+    history.Add(L"a");
+    std::uint64_t cursor = 0;
+    history.TextSince(cursor);  // read "a"
+    history.Add(L"b");          // dropped below, before anyone reads it
+    history.Add(L"c");
+    history.Add(L"d");
+    CHECK(history.TextSince(cursor) == L"c\r\nd\r\n");
+}
+
 struct Test {
     const char* name;
     void (*run)();  // a pointer to a function taking nothing and returning nothing
@@ -257,6 +298,10 @@ const Test kTests[] = {
     {"ApplyFailsWhenTheReadBackTimesOut", ApplyFailsWhenTheReadBackTimesOut},
     {"ApplyStopsWhenTheSetFails", ApplyStopsWhenTheSetFails},
     {"EmptyProfileSendsNothing", EmptyProfileSendsNothing},
+    {"LogHistoryReadsEverythingFromTheStart", LogHistoryReadsEverythingFromTheStart},
+    {"LogHistoryReadsOnlyNewLines", LogHistoryReadsOnlyNewLines},
+    {"LogHistoryKeepsTheNewestLines", LogHistoryKeepsTheNewestLines},
+    {"LogHistorySkipsLinesDroppedSinceTheLastRead", LogHistorySkipsLinesDroppedSinceTheLastRead},
 };
 
 }  // namespace

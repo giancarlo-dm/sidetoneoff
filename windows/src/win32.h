@@ -48,11 +48,13 @@ struct IconDestroyer {
 };
 using UniqueIcon = std::unique_ptr<std::remove_pointer_t<HICON>, IconDestroyer>;
 
-// A GDI bitmap, deleted automatically. GDI can't delete a bitmap that is still selected into a DC.
+// GDI bitmaps and fonts, deleted automatically. GDI can't delete a bitmap still selected into a DC, and a font
+// should outlive the controls that use it (WM_SETFONT doesn't copy it).
 struct GdiObjectDeleter {
     void operator()(HGDIOBJ object) const noexcept { DeleteObject(object); }
 };
 using UniqueBitmap = std::unique_ptr<std::remove_pointer_t<HBITMAP>, GdiObjectDeleter>;
+using UniqueFont = std::unique_ptr<std::remove_pointer_t<HFONT>, GdiObjectDeleter>;
 
 // A memory DC (CreateCompatibleDC), deleted automatically.
 struct DcDeleter {
