@@ -4,7 +4,7 @@ Written 2026-11-21, after reading `spec.md` and the Mac source (`mac/`), and aft
 `spec.md` stays the base. **Where this plan differs, this plan wins**: section 1 has the decisions, and section 3 every change from the spec.
 The work is split into phases (section 6). Each phase is one commit, reviewed and committed by you, the engineer.
 
-**Status (2026-11-23):** Phases 0–6 are committed; Phase 7 records the release check of **1.0.0** (section 7). No open questions remain.
+**Status (2026-11-23):** Phases 0–6 are committed; Phase 7 records the release check of **1.0.0**, which passed (section 7). No open questions remain.
 
 ---
 
@@ -687,24 +687,24 @@ Added 2026-11-23, after Phase 5, at your request. Design in 5.7.
 
 ### Release check of 1.0.0 (2026-11-23)
 
-My checks ran on the 1.0.0 build, on this PC, with the G635 connected and Defender on. They were run again, all passing, after the rename to "SidetoneOff" (M18). Items marked *yours* need hands, eyes or a reboot.
+My checks ran on the 1.0.0 build, on this PC, with the G635 connected and Defender on. They were run again, all passing, after the rename to "SidetoneOff" (M18). The right column has your hands-on results, reported 2026-11-23: **every item passes**.
 
 | # | My result | Yours |
 |---|---|---|
 | 1 | **Pass.** A fresh `git clone`, with the uncommitted changes copied in, builds with 0 warnings, 20/20 unit tests and a 268 KB exe. | — |
 | 2 | **Pass.** `--diag --console`: Col03, `FF43`/`0202`, out 20, protocol 4.2, firmware U1 30.00, index 7, level after 0, exit 0. | — |
-| 3 | **Pass.** No-argument start → "Install SidetoneOff?" → Install → the app runs from the install folder and shows its notice. The Uninstall key holds 1.0.0 and the Publisher; the Run value ends in `--autostart`. Task Manager › Startup apps lists it as "SidetoneOff.exe" with no publisher, like every other classic Run entry on this PC: Edge, Windows Security, AMD, Figma and IDrive, all signed and with proper descriptions. Only Store apps get names there. For a while before the restart it showed "SidetoneOff" and the publisher, and IDrive showed "IDrive"; the restart cleared both. That is Windows' doing; the exe's version info is correct. | *Yours:* see it in Installed apps and Startup apps. |
-| 4 | — | *Yours:* plug and unplug, with Sound › Recording open. |
+| 3 | **Pass.** No-argument start → "Install SidetoneOff?" → Install → the app runs from the install folder and shows its notice. The Uninstall key holds 1.0.0 and the Publisher; the Run value ends in `--autostart`. Task Manager › Startup apps lists it as "SidetoneOff.exe" with no publisher, like every other classic Run entry on this PC: Edge, Windows Security, AMD, Figma and IDrive, all signed and with proper descriptions. Only Store apps get names there. For a while before the restart it showed "SidetoneOff" and the publisher, and IDrive showed "IDrive"; the restart cleared both. That is Windows' doing; the exe's version info is correct. | **Pass** (you, 2026-11-23). |
+| 4 | — | **Pass** (you): plug and unplug, with Sound › Recording open. |
 | 5 | **Pass** (you restarted at 16:32). The app's own history: started at sign-in with `--autostart` at 16:33:26, sidetone off on attempt 1 one second later, and no notice. | — |
-| 6 | **Pass (simulated).** A posted resume message → sidetone off on attempt 1. | *Yours:* a real sleep and wake. |
-| 7 | **Pass (simulated, Phase 3–4).** `TaskbarCreated` → the icon is added again. | *Yours:* restart Explorer. |
+| 6 | **Pass (simulated).** A posted resume message → sidetone off on attempt 1. | **Pass** (you): a real sleep and wake. |
+| 7 | **Pass (simulated, Phase 3–4).** `TaskbarCreated` → the icon is added again. | **Pass** (you): Explorer restarted. |
 | 8 | **Pass.** A second launch of the installed exe exits at once with code 0; one instance remains. | — |
 | 9 | **Pass.** No-argument start while running → "Update SidetoneOff to 1.0.0?" → Update → the old process exits cleanly, a new one starts. | — |
 | 10 | **Pass.** Task Manager's Memory (private working set) 1.5 MB; CPU time unchanged over 60 s idle. The full working set is 11.8 MB, mostly shared pages of Windows' own DLLs. | — |
 | 11 | **Pass.** Enter in the Uninstall dialog cancels; the Uninstall button removes everything, the files within 5 s. | — |
-| 12 | **Pass.** The `UninstallString`, run as Settings › Apps runs it, while the app runs → nothing left, no dialog. | *Yours:* the real Settings › Apps › Uninstall. |
-| 13 | **Pass.** `Get-MpThreatDetection`: 0 detections today, across every install, update and uninstall of Phases 5–7. | *Yours:* a look at Protection history. |
-| 14 | **Pass.** Show log lists the 1.0.0 history with times, including the simulated resume. | *Yours:* unplug and replug while it's open. |
+| 12 | **Pass.** The `UninstallString`, run as Settings › Apps runs it, while the app runs → nothing left, no dialog. | **Pass** (you): the real Settings › Apps › Uninstall. |
+| 13 | **Pass.** `Get-MpThreatDetection`: 0 detections today, across every install, update and uninstall of Phases 5–7. | **Pass** (you): Protection history clean; 0 detections again after your reinstall at 16:43. |
+| 14 | **Pass.** Show log lists the 1.0.0 history with times, including the simulated resume. | **Pass** (you): unplug and replug while it's open. |
 
 ---
 
