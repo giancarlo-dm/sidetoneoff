@@ -1,4 +1,4 @@
-// The app's log. Each line goes to OutputDebugString as "Sidetone Off: ...", readable with DebugView or any
+// The app's log. Each line goes to OutputDebugString as "SidetoneOff: ...", readable with DebugView or any
 // debugger, and, with its date and time, into this process's history, which the log window shows (plan,
 // section 5.7). No log files.
 #pragma once

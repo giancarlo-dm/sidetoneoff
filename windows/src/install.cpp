@@ -19,7 +19,7 @@ namespace {
 
 // The steps, worded to follow "Couldn't " in an error. Windows-only, so they live here rather than in strings.h.
 constexpr wchar_t kStepFindFolder[] = L"find the install folder";
-constexpr wchar_t kStepClose[] = L"close the running Sidetone Off";
+constexpr wchar_t kStepClose[] = L"close the running SidetoneOff";
 constexpr wchar_t kStepCreateFolder[] = L"create the install folder";
 constexpr wchar_t kStepCopy[] = L"copy the app into its folder";
 constexpr wchar_t kStepStartup[] = L"add it to startup";
@@ -67,9 +67,9 @@ DWORD RetryWhileBusy(const auto& operation) {
 
 // Where everything goes (plan, section 5.3).
 struct InstallPaths {
-    std::wstring folder;    // %LOCALAPPDATA%\Programs\Sidetone Off
-    std::wstring exe;       // ...\Sidetone Off\SidetoneOff.exe
-    std::wstring shortcut;  // ...\Start Menu\Programs\Sidetone Off.lnk
+    std::wstring folder;    // %LOCALAPPDATA%\Programs\SidetoneOff
+    std::wstring exe;       // ...\SidetoneOff\SidetoneOff.exe
+    std::wstring shortcut;  // ...\Start Menu\Programs\SidetoneOff.lnk
 };
 
 // A known folder's path. `create`: make the folder if it doesn't exist yet; otherwise just compute its path.
@@ -305,7 +305,7 @@ HRESULT CALLBACK TrackOpenDialog(HWND dialog, UINT notification, WPARAM, LPARAM,
     return S_OK;
 }
 
-// A task dialog titled "Sidetone Off". With `yesButton`, it has that button and Cancel, and returns true if the
+// A task dialog titled "SidetoneOff". With `yesButton`, it has that button and Cancel, and returns true if the
 // user picked it; without, it has OK only, and returns false. Esc, Alt+F4 and WM_CLOSE all cancel.
 bool RunDialog(PCWSTR icon, const wchar_t* question, const wchar_t* text, const wchar_t* yesButton,
                bool cancelIsDefault, HWND* openDialog) {

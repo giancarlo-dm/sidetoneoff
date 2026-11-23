@@ -133,5 +133,5 @@ if ($Install) {
     if ($setup.ExitCode -ne 0) {
         throw "SidetoneOff.exe --install failed with exit code $($setup.ExitCode). Its debug log (DebugView) says why."
     }
-    Write-Host "==> Installed in $(Join-Path $env:LOCALAPPDATA 'Programs\Sidetone Off'), and started"
+    Write-Host "==> Installed in $(Join-Path $env:LOCALAPPDATA 'Programs\SidetoneOff'), and started"
 }

@@ -2,8 +2,8 @@
 // so it must stay rc-compatible: #defines only.
 #pragma once
 
-#define SIDETONE_VERSION_MAJOR 0
-#define SIDETONE_VERSION_MINOR 1
+#define SIDETONE_VERSION_MAJOR 1
+#define SIDETONE_VERSION_MINOR 0
 #define SIDETONE_VERSION_PATCH 0
 
 #define SIDETONE_STRINGIFY_(x) #x

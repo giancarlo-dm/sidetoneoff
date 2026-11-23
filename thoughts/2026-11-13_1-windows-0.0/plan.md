@@ -1,24 +1,16 @@
-# Sidetone Off — Windows 0.0 — Plan
+# SidetoneOff — Windows 0.0 — Plan
 
 Written 2026-11-21, after reading `spec.md` and the Mac source (`mac/`), and after probing the real G635 on this PC.
-`spec.md` stays the base. **Where this plan differs, this plan wins**: section 1 has the open questions and decisions, and section 3 every change from the spec.
+`spec.md` stays the base. **Where this plan differs, this plan wins**: section 1 has the decisions, and section 3 every change from the spec.
 The work is split into phases (section 6). Each phase is one commit, reviewed and committed by you, the engineer.
+
+**Status (2026-11-23):** Phases 0–6 are committed; Phase 7 records the release check of **1.0.0** (section 7). No open questions remain.
 
 ---
 
-## 1. Open questions and decisions
+## 1. Decisions
 
-### Open questions
-
-This is a minor blocker: I'll ask again, with this recommendation, before the phase that needs the answer.
-
-| # | Question | Needed by | Recommendation |
-|---|---|---|---|
-| M9 | Release version | Phase 7 | Keep **0.1.0** during development and bump to **1.0.0** in Phase 7 once the release checklist passes, matching the Mac app's 1.0. |
-
-### Decisions
-
-Answered 2026-11-21.
+Answered 2026-11-21 unless noted.
 
 | # | Question | Decision |
 |---|---|---|
@@ -31,6 +23,7 @@ Answered 2026-11-21.
 | M6 | Old setup (scheduled task, `C:\Tools\HeadsetControl`) | **It never existed** (it was brainstorming). The spec's "Old setup to remove" section is dropped, and the README says nothing about it. |
 | M7 | RGB lighting | **Not in this version.** It's for the next one (section 8). |
 | M8 | App icon glyph weight | **About the Mac icon's semibold weight.** The Segoe glyph got a light outline for it (Phase 4). The drawn glyph (M12) has that weight built in: a 2-unit stroke on its 24-unit grid. |
+| M9 | Release version | **1.0.0** (answered 2026-11-23, at the start of Phase 7), matching the Mac app's 1.0. Development ran as 0.1.0; the release checklist (section 7) runs on the 1.0.0 build. |
 | T1 | C++ standard | **`/std:c++23`**: the newest *stable* standard. It is complete in MSVC 14.52 (GA 2026-11-10, LTS). C++26 only exists partially under `/std:c++latest`, which changes with each compiler update. Move to C++26 once MSVC ships it stable. |
 | T2 | Toolchain | **VS 2026 Build Tools 18.12 (MSVC 14.52)**, installed 2026-11-21 with `winget install --id Microsoft.VisualStudio.BuildTools` (VCTools workload + recommended, which brings the newest Windows SDK). **VS 2019 Build Tools is removed** once the new toolchain is validated (Phase 0). |
 | A1 | Code structure, with RGB and other features in mind | **Hybrid** (decided after Phase 1). Classes for what owns a resource or keeps state, free functions for operations. One interface, `Transport`, because there really are several implementations (Windows now; Linux, Mac and tests later). No inheritance hierarchies. Errors are `std::expected` values, not exceptions. See 5.0. |
@@ -38,11 +31,12 @@ Answered 2026-11-21.
 | M10 | Unit tests with a fake `Transport` (5.0) | **Yes** (answered at the start of Phase 2). `windows/tests/tests.cpp` builds into one small test exe, with plain checks and no framework. `build.ps1` builds and runs it on every build, before the app is linked, and a failing test fails the build. The tests need no headset. They cover the request bytes (`11 FF 07 1A 00 …`), response matching, skipping unsolicited reports, HID++ errors, a missing feature, timeouts, write errors and the error text. A read-back that isn't 0 is covered in Phase 3, with `Apply`. |
 | M11 | App icon at small sizes (found in Phase 4: with the spec's proportions, the glyph is a blur at 16 and 20 px) | **The Mac's layout at every size**, as in the spec. Phase 4 shipped a small-size layout for 16–24 px (a full tile with a pixel-hinted glyph). It was reverted in the Phase 5 review (2026-11-23): you found it ugly, and want the icon as on the Mac. |
 | M12 | Tray and app icon glyph (Phase 5 review: the Segoe glyph looks square next to the Mac's rounded one) | **An original drawing**: a rounded headband with filled, rounded ear cups (variant B of the drawn prototypes), drawn by `make-icon.ps1` for both icons. The Mac's SF Symbols "headphones" can't ship on Windows: Apple licenses SF Symbols for Apple platforms only, and never in app icons. Windows' icon font has no rounder headphone. |
-| M13 | Tooltip and status wording (Phase 5 review) | **Tooltip on two lines**: "Sidetone Off", then the status. When sidetone is off, the status is just "Logitech G635 connected", in the tooltip and in the menu. |
-| M14 | When "Sidetone Off is running" shows (Phase 5 review: it didn't after an update, or after Quit and reopening) | **On every start you make** (install, update, Start menu, double-click), **not at sign-in**: the Run value passes `--autostart`, which skips it. A start while the app is already running still does nothing (spec). |
+| M13 | Tooltip and status wording (Phase 5 review) | **Tooltip on two lines**: "SidetoneOff", then the status. When sidetone is off, the status is just "Logitech G635 connected", in the tooltip and in the menu. |
+| M14 | When "SidetoneOff is running" shows (Phase 5 review: it didn't after an update, or after Quit and reopening) | **On every start you make** (install, update, Start menu, double-click), **not at sign-in**: the Run value passes `--autostart`, which skips it. A start while the app is already running still does nothing (spec). |
 | M15 | Log window: where the history lives (asked 2026-11-23, after Phase 5) | **In memory**: the last 500 lines since the app started, lost on Quit or restart. No log files, as in the spec. You asked to add the phase and continue, so this and M16–M17 are my recommendations. |
 | M16 | Log window: which lines | **The same lines as the debug log**, each after its date and time. One source of messages; some lines are technical (e.g. the HID device path). |
 | M17 | Log window: dark mode | **No.** Standard Windows controls, which are light-themed; dark mode needs undocumented APIs. |
+| M18 | The app's name (Phase 7: you noted "the app name is SidetoneOff"; the spec and the Mac app display "Sidetone Off") | **"SidetoneOff", one word, everywhere on Windows** (answered 2026-11-23): dialogs, tooltip, notice, log window title, Installed apps, Start menu shortcut, install folder, Run value, version info, debug-log prefix and README. Names that already were one word stay (exe, window classes, mutex, `Uninstall\SidetoneOff`, `Software\SidetoneOff`). The repo stays `sidetone-off`. The Mac app still displays "Sidetone Off" until it's renamed too (section 8). |
 
 Decisions made earlier in the conversation (installer, detection, read-back, Quit…) are in section 3.
 
@@ -83,7 +77,7 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 | 7 | Toolchain | "Visual Studio with C++ workload", C++20 | **VS 2026 Build Tools (MSVC 14.52) + `/std:c++23`** (T1, T2). `build.ps1` fails if MSVC is older than 14.52. | You asked for the newest C++ possible. VS 2019 (MSVC 14.29) stops at C++20. |
 | 8 | Old setup | Remove the task and folder (README + finish page) | **Dropped** (M6) | It never existed. |
 | 9 | `--diag` | Lists, sends, reports bytes | Also HID++ version, firmware, feature index, **level before and after** | The read-back answers "is it off?" with no need to listen. |
-| 10 | Version info | — | `VERSIONINFO` resource with `FileDescription` "Sidetone Off" | The Win11 toast (balloon) and Startup apps take the name from it. |
+| 10 | Version info | — | `VERSIONINFO` resource with `FileDescription` "SidetoneOff" | The Win11 toast (balloon) and Startup apps take the name from it. |
 | 11 | Commits | — | You commit by hand; I provide title and description (M1). | Your rule. |
 | 12 | Conversation language | pt-BR | **English** (L1) | Your request. |
 | 13 | Connected state | `connectedCount` counter, as on the Mac | Re-read from the system on each G635 removal (5.2) | A counter can drift if a notification is missed. |
@@ -91,12 +85,13 @@ Decisions made earlier in the conversation (installer, detection, read-back, Qui
 | 15 | Glyph | Segoe Fluent Icons `U+E7F6`, rendered at runtime | **An original drawn headphones glyph** (M12), drawn at build time into the app icon and into `tray.ico`, which the app recolors | The Segoe glyph looks square; the Mac's rounded SF Symbol can't ship on Windows. |
 | 16 | Tray icon alpha | "32-bpp premultiplied-alpha `HICON`" | **Straight (not premultiplied) alpha** | Measured in Phase 4: `DrawIconEx` blends icon pixels as straight alpha, so premultiplied pixels would draw darker edges. |
 | 17 | PNG images in `app.ico` | 256 px only | **48, 64 and 256 px** | Windows reads PNG icons at any size, and this saves about 20 KB of the 300 KB budget. 16–32 px stay plain bitmaps. |
-| 18 | First-run notice | One sentence, shown once | The same words as a title, "Sidetone Off is running", plus the rest as text, with the app icon (5.4). Shown **on every start you make, not at sign-in** (M14). | Windows 11 shows the notice as a toast with a bold title. You want it after an update and after reopening too. |
+| 18 | First-run notice | One sentence, shown once | The same words as a title, "SidetoneOff is running", plus the rest as text, with the app icon (5.4). Shown **on every start you make, not at sign-in** (M14). | Windows 11 shows the notice as a toast with a bold title. You want it after an update and after reopening too. |
 | 19 | Uninstall cleanup | Run value, settings key, shortcut, files | Also the StartupApproved value, Windows' record of the switch in Settings › Apps › Startup | "Nothing left" (section 7, #11), including what Windows wrote for the app. |
 | 20 | Tooltip and status | Tooltip `Sidetone Off — <status>`; "… connected — sidetone off" | Tooltip on two lines; "Logitech G635 connected" when sidetone is off (M13) | "Sidetone off" twice in one line read oddly. |
 | 21 | Run value | `"<exe>"` | `"<exe>" --autostart` | Tells the start at sign-in apart, so it shows no notice (M14). |
 | 22 | Menu status line | Grayed while disconnected, otherwise normal with a click that does nothing | **Always disabled** (grayed, not clickable) | It's a status, not a command (your Phase 5 review). The Mac's status line is always disabled too. |
 | 23 | Logging | `OutputDebugStringW` only, no log files | Also a **log window** (Tray › Show log) with the history since the app started. Still no files (M15). | Without a debug listener such as DebugView, there was no way to see what the app did. |
+| 24 | App name | "Sidetone Off" (tooltip, dialogs, balloon, install folder, Run value) | **"SidetoneOff"** everywhere (M18) | Your call: the app's name is one word. |
 
 UI strings follow `spec.md`. They differ from the Mac's on purpose.
 
@@ -252,7 +247,7 @@ In Phase 2, `--diag` calls `GetSidetone` / `SetSidetone` / `GetSidetone` directl
 
 **Retries.** Up to 5 attempts, with every failure retried.
 
-**Logging.** `OutputDebugStringW("Sidetone Off: …")` with the paths, caps, feature index, bytes written, level read, `GetLastError` and HID++ error codes.
+**Logging.** `OutputDebugStringW("SidetoneOff: …")` with the paths, caps, feature index, bytes written, level read, `GetLastError` and HID++ error codes.
 
 ### 5.2 Detection, worker, state
 
@@ -297,16 +292,16 @@ States, menu, tooltip and icon dimming follow the spec's table.
 ### 5.3 Self-install (replaces the spec's Installer section)
 
 **Locations.**
-- **Install dir:** `%LOCALAPPDATA%\Programs\Sidetone Off\SidetoneOff.exe` (`FOLDERID_UserProgramFiles`).
-- **Run value:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Sidetone Off` = `"<install dir>\SidetoneOff.exe" --autostart` (M14).
-- **Start Menu shortcut:** `FOLDERID_Programs\Sidetone Off.lnk`, created with `IShellLinkW` (`ole32`, `uuid`).
+- **Install dir:** `%LOCALAPPDATA%\Programs\SidetoneOff\SidetoneOff.exe` (`FOLDERID_UserProgramFiles`).
+- **Run value:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `SidetoneOff` = `"<install dir>\SidetoneOff.exe" --autostart` (M14).
+- **Start Menu shortcut:** `FOLDERID_Programs\SidetoneOff.lnk`, created with `IShellLinkW` (`ole32`, `uuid`).
 - **Uninstall entry:** `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\SidetoneOff`, which makes it show in Settings › Apps › Installed apps. Values:
-  - `DisplayName` "Sidetone Off", `DisplayIcon` (`<exe>,0`), `DisplayVersion`, `Publisher` "Giancarlo Dalle Mole" (M5)
+  - `DisplayName` "SidetoneOff", `DisplayIcon` (`<exe>,0`), `DisplayVersion`, `Publisher` "Giancarlo Dalle Mole" (M5)
   - `InstallLocation`, `InstallDate`, `EstimatedSize`
   - `UninstallString` = `"<exe>" --uninstall`
   - `NoModify=1`, `NoRepair=1`
 - **App settings:** `HKCU\Software\SidetoneOff`. Empty in this version (the next one keeps its RGB colors there), but uninstalling deletes it.
-- **Startup switch:** when you turn the app off in Settings › Apps › Startup, Windows stores that as the `Sidetone Off` value under `HKCU\…\Explorer\StartupApproved\Run`. Uninstalling deletes it too.
+- **Startup switch:** when you turn the app off in Settings › Apps › Startup, Windows stores that as the `SidetoneOff` value under `HKCU\…\Explorer\StartupApproved\Run`. Uninstalling deletes it too.
 
 **"Installed" means the same file.** Whether this process runs the installed exe is decided by file identity (volume serial and file ID), not by comparing path strings, so case, short names and links don't matter.
 
@@ -314,9 +309,9 @@ States, menu, tooltip and icon dimming follow the spec's table.
 
 | Launch | Behavior |
 |---|---|
-| No args, exe **outside** the install dir | Confirmation dialog (M3): "Install Sidetone Off?" with **Install** / Cancel, or "Update Sidetone Off to x.y.z?" with **Update** / Cancel when already installed. Yes → install steps; an error shows in a dialog. Cancel → exit. |
+| No args, exe **outside** the install dir | Confirmation dialog (M3): "Install SidetoneOff?" with **Install** / Cancel, or "Update SidetoneOff to x.y.z?" with **Update** / Cancel when already installed. Yes → install steps; an error shows in a dialog. Cancel → exit. |
 | `--install` | Install steps with no dialog. Errors are only logged, with exit code 1. Used by `build.ps1 -Install`, like `build.sh`. |
-| No args, exe **inside** the install dir | Tray app: mutex, tray, and the "Sidetone Off is running" notice (M14) |
+| No args, exe **inside** the install dir | Tray app: mutex, tray, and the "SidetoneOff is running" notice (M14) |
 | `--autostart`, exe **inside** the install dir | The Run value, at sign-in: the tray app, without the notice. From anywhere else it counts as unknown arguments. |
 | `--uninstall` | From Settings › Apps. **No dialog** (M4), except to show an error. Uninstall steps. |
 | Tray › Uninstall… | Spec's confirmation dialog, default Cancel. Uninstall steps 2–3 run in the app, and the app ends. Once its worker has stopped and the tray icon is gone, `wWinMain` runs step 4. |
@@ -361,16 +356,16 @@ As in the spec, with these specifics:
   - Color follows `SystemUsesLightTheme`: white on a dark taskbar, black on a light one. Disconnected shows it at 40% opacity.
   - The normal and dimmed icons are made once and kept. They're remade only if the icon size or the theme really changed, which is checked on any `WM_SETTINGCHANGE`, `WM_DPICHANGED`, `WM_DISPLAYCHANGE` and `TaskbarCreated`. Explorer also sends `TaskbarCreated` when the taskbar's DPI changes.
   - If that fails (logged), the stock application icon keeps the tray icon, and its menu, there.
-- **Tooltip (M13):** two lines, "Sidetone Off" and the status.
+- **Tooltip (M13):** two lines, "SidetoneOff" and the status.
   - Every `Shell_NotifyIconW` call sends the icon, the tooltip and `NIF_SHOWTIP`. With `NOTIFYICON_VERSION_4`, Windows hides the standard tooltip without that flag.
   - The tooltip is sent again right after `NIM_SETVERSION`: the one sent with `NIM_ADD`, before the version was set, doesn't count. Without this, it only appeared after the first status change (found in the Phase 5 review).
 - **App icon:** `make-icon.ps1` → `build/app.ico`, embedded in the exe as its first icon (`IDI_APP` in `res/resource.h`). Sizes 16, 20, 24, 32, 48, 64 and 256.
   - The spec's design, as on the Mac, at every size (M11): a tile filling 80% of the canvas, the gradient `#665CF2` → `#3D2EB2`, and the white glyph at about half the tile.
   - 48, 64 and 256 px are stored as PNG, the others as 32-bit bitmaps with a 1-bit mask (section 3, #17). `tray.ico` is all PNG. The script writes the `.ico` files itself, because System.Drawing can't save a multi-size icon with alpha.
-- **"Sidetone Off is running" notice:** the spec's first-run text, split into a title, "Sidetone Off is running", and the rest as its text (section 3, #18).
+- **"SidetoneOff is running" notice:** the spec's first-run text, split into a title, "SidetoneOff is running", and the rest as its text (section 3, #18).
   - Shown with `NIF_INFO` and the app icon (`LoadIconMetric`, large). Windows 11 shows it as a toast; the tray glyph would be white on white there.
   - Shown on every start except the one at sign-in (`--autostart`) (M14).
-- **Dialogs** are `TaskDialogIndirect`, titled "Sidetone Off": install and update with the app icon; uninstall with the warning icon, Cancel as default; errors with the error icon.
+- **Dialogs** are `TaskDialogIndirect`, titled "SidetoneOff": install and update with the app icon; uninstall with the warning icon, Cancel as default; errors with the error icon.
   - Every one closes with Esc, Alt+F4 or `WM_CLOSE` (`TDF_ALLOW_DIALOG_CANCELLATION`).
   - An error names the failed step and Windows' reason, e.g. "Couldn't copy the app into its folder: Access is denied. (error 5)".
 
@@ -419,7 +414,7 @@ windows/
     diag.cpp/.h        --diag (free function)
     strings.h          every UI string in one place (backport / Linux)
     version.h          the single version number (code + rc)
-    log.cpp/.h         Log(): OutputDebugString ("Sidetone Off: …" lines) and the history
+    log.cpp/.h         Log(): OutputDebugString ("SidetoneOff: …" lines) and the history
     log_history.cpp/.h portable: LogHistory, the last 500 lines (Phase 6)
     log_window.cpp/.h  LogWindow: Tray > Show log (Phase 6)
   res/
@@ -458,7 +453,7 @@ Output goes to `windows/build/`, which git ignores.
 
 **Window.**
 - Tray › **Show log** opens it. Choosing it again brings the open window to the front.
-- A resizable top-level window titled "Sidetone Off — Log", with the app icon. Its whole client area is a read-only, word-wrapped text box (a multiline EDIT control) with a vertical scroll bar, in Consolas 10 pt on a white background (M17).
+- A resizable top-level window titled "SidetoneOff — Log", with the app icon. Its whole client area is a read-only, word-wrapped text box (a multiline EDIT control) with a vertical scroll bar, in Consolas 10 pt on a white background (M17).
 - Sized for its monitor's DPI when it opens, and resized, with a new font, on `WM_DPICHANGED`.
 - **Live:** each new line posts a message to the window, which appends the lines since its cursor.
   - It follows new lines only if it was scrolled to the end, and keeps the reader's selection.
@@ -677,7 +672,7 @@ Added 2026-11-23, after Phase 5, at your request. Design in 5.7.
 
 1. `build.ps1` from a clean clone → `build\SidetoneOff.exe`, no warnings, all unit tests pass, < 300 KB. [P1, P2]
 2. `--diag` with the G635 → Col03 / `0xFF43`/`0x0202`, out 20, index 7, after-level 0, exit 0. [P2]
-3. Double-click the exe → confirmation dialog → tray icon and the "Sidetone Off is running" notice. Quit and reopen → the notice again; it doesn't show at sign-in. The app shows in Installed apps (icon, Publisher) and in Startup apps. [P5]
+3. Double-click the exe → confirmation dialog → tray icon and the "SidetoneOff is running" notice. Quit and reopen → the notice again; it doesn't show at sign-in. The app shows in Installed apps (icon, Publisher) and in Startup apps. [P5]
 4. Plug / unplug → the status and icon change. After plugging in, `--diag` reads 0, and with Recording open there's no sidetone. [P3]
 5. Restart Windows with the headset connected → sidetone off. [P5]
 6. Sleep → resume while connected → sidetone off. [P3]
@@ -689,6 +684,27 @@ Added 2026-11-23, after Phase 5, at your request. Design in 5.7.
 12. Settings › Apps › Uninstall while running → same result, no extra dialog. [P5]
 13. Defender on throughout → nothing in Protection history. [P5/P7]
 14. Tray › Show log → the history since the app started, with times. Unplug and replug while it is open → the new lines appear. [P6]
+
+### Release check of 1.0.0 (2026-11-23)
+
+My checks ran on the 1.0.0 build, on this PC, with the G635 connected and Defender on. They were run again, all passing, after the rename to "SidetoneOff" (M18). Items marked *yours* need hands, eyes or a reboot.
+
+| # | My result | Yours |
+|---|---|---|
+| 1 | **Pass.** A fresh `git clone`, with the uncommitted changes copied in, builds with 0 warnings, 20/20 unit tests and a 268 KB exe. | — |
+| 2 | **Pass.** `--diag --console`: Col03, `FF43`/`0202`, out 20, protocol 4.2, firmware U1 30.00, index 7, level after 0, exit 0. | — |
+| 3 | **Pass.** No-argument start → "Install SidetoneOff?" → Install → the app runs from the install folder and shows its notice. The Uninstall key holds 1.0.0 and the Publisher; the Run value ends in `--autostart`. Task Manager › Startup apps lists it as "SidetoneOff.exe" with no publisher, like every other classic Run entry on this PC: Edge, Windows Security, AMD, Figma and IDrive, all signed and with proper descriptions. Only Store apps get names there. For a while before the restart it showed "SidetoneOff" and the publisher, and IDrive showed "IDrive"; the restart cleared both. That is Windows' doing; the exe's version info is correct. | *Yours:* see it in Installed apps and Startup apps. |
+| 4 | — | *Yours:* plug and unplug, with Sound › Recording open. |
+| 5 | **Pass** (you restarted at 16:32). The app's own history: started at sign-in with `--autostart` at 16:33:26, sidetone off on attempt 1 one second later, and no notice. | — |
+| 6 | **Pass (simulated).** A posted resume message → sidetone off on attempt 1. | *Yours:* a real sleep and wake. |
+| 7 | **Pass (simulated, Phase 3–4).** `TaskbarCreated` → the icon is added again. | *Yours:* restart Explorer. |
+| 8 | **Pass.** A second launch of the installed exe exits at once with code 0; one instance remains. | — |
+| 9 | **Pass.** No-argument start while running → "Update SidetoneOff to 1.0.0?" → Update → the old process exits cleanly, a new one starts. | — |
+| 10 | **Pass.** Task Manager's Memory (private working set) 1.5 MB; CPU time unchanged over 60 s idle. The full working set is 11.8 MB, mostly shared pages of Windows' own DLLs. | — |
+| 11 | **Pass.** Enter in the Uninstall dialog cancels; the Uninstall button removes everything, the files within 5 s. | — |
+| 12 | **Pass.** The `UninstallString`, run as Settings › Apps runs it, while the app runs → nothing left, no dialog. | *Yours:* the real Settings › Apps › Uninstall. |
+| 13 | **Pass.** `Get-MpThreatDetection`: 0 detections today, across every install, update and uninstall of Phases 5–7. | *Yours:* a look at Protection history. |
+| 14 | **Pass.** Show log lists the 1.0.0 history with times, including the simulated resume. | *Yours:* unplug and replug while it's open. |
 
 ---
 
@@ -706,5 +722,6 @@ Added 2026-11-23, after Phase 5, at your request. Design in 5.7.
   - read-back;
   - resume trigger;
   - HID-arrival trigger;
-  - the app icon with the drawn glyph (M12). Apple's terms don't allow SF Symbols in app icons, even on the Mac. The menu-bar icon can stay SF Symbols.
+  - the app icon with the drawn glyph (M12). Apple's terms don't allow SF Symbols in app icons, even on the Mac. The menu-bar icon can stay SF Symbols;
+  - the display name "SidetoneOff" (M18): `CFBundleName` and `CFBundleDisplayName` in `Info.plist`, the bundle `SidetoneOff.app`, and the strings in `main.swift`.
 - **Linux:** reuse `hidpp.*` and `profile.*`, with a `HidrawTransport` (`hidraw` + udev monitor), StatusNotifierItem for the tray, and the drawn glyph (M12), which is ours and works on any platform.

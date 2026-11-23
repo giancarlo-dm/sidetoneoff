@@ -73,7 +73,7 @@ NOTIFYICONDATAW Tray::CurrentData() const {
     // NIF_SHOWTIP goes with every call: with NOTIFYICON_VERSION_4, the standard tooltip only shows with it.
     data.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
     data.hIcon = CurrentIcon();
-    // Two lines: "Sidetone Off", then the status (decision M13).
+    // Two lines: "SidetoneOff", then the status (decision M13).
     StringCchPrintfW(data.szTip, std::size(data.szTip), L"%s\n%s", ui::kAppName, StatusText(status_));
     return data;
 }

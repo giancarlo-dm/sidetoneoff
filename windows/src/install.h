@@ -38,12 +38,12 @@ std::expected<void, InstallError> Unregister();
 std::expected<void, InstallError> RemoveInstalledFiles();
 
 // The dialog for an exe started with no arguments from outside the install folder (decision M3):
-// "Install Sidetone Off?", or "Update Sidetone Off to x.y.z?" when `update`. True if the user said yes.
+// "Install SidetoneOff?", or "Update SidetoneOff to x.y.z?" when `update`. True if the user said yes.
 bool ConfirmInstall(bool update);
 
 // Tray > Uninstall…'s dialog (spec). Cancel is the default, so Enter doesn't uninstall by accident. True if the
 // user chose Uninstall. While it is open, `*openDialog` is its window, so the app can close it.
 bool ConfirmUninstall(HWND* openDialog);
 
-// An error dialog: `title` (e.g. "Couldn't install Sidetone Off") over DescribeError(error). `openDialog` as above.
+// An error dialog: `title` (e.g. "Couldn't install SidetoneOff") over DescribeError(error). `openDialog` as above.
 void ShowError(const wchar_t* title, const InstallError& error, HWND* openDialog = nullptr);

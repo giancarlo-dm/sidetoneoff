@@ -48,7 +48,7 @@ std::unique_ptr<App> App::Create(HINSTANCE instance, bool showNotice) {
     app->devices_ = DeviceWatcher::Create(app->window_);
     if (!app->worker_ || !app->devices_) return nullptr;  // logged by them; ~App cleans up
 
-    // "Sidetone Off is running": on every start you make, not at sign-in (decision M14).
+    // "SidetoneOff is running": on every start you make, not at sign-in (decision M14).
     if (showNotice) {
         if (app->tray_->ShowNotice(ui::kNoticeTitle, ui::kNoticeText)) Log(L"notice shown");
         else Log(L"can't show the notice (error %lu)", GetLastError());

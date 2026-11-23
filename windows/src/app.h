@@ -12,7 +12,7 @@
 
 class App {
 public:
-    // Creates the window, the tray icon, the device notifications and the worker, shows the "Sidetone Off is
+    // Creates the window, the tray icon, the device notifications and the worker, shows the "SidetoneOff is
     // running" notice if `showNotice`, and starts turning sidetone off if the headset is already plugged in.
     // nullptr (logged) on failure.
     static std::unique_ptr<App> Create(HINSTANCE instance, bool showNotice);

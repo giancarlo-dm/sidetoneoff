@@ -25,11 +25,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName",      "Giancarlo Dalle Mole"
-            VALUE "FileDescription",  "Sidetone Off"
+            VALUE "FileDescription",  "SidetoneOff"
             VALUE "FileVersion",      SIDETONE_VERSION_STRING
             VALUE "InternalName",     "SidetoneOff"
             VALUE "OriginalFilename", "SidetoneOff.exe"
-            VALUE "ProductName",      "Sidetone Off"
+            VALUE "ProductName",      "SidetoneOff"
             VALUE "ProductVersion",   SIDETONE_VERSION_STRING
         END
     END

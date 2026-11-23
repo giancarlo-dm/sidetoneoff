@@ -1,4 +1,4 @@
-// Sidetone Off for Windows: turns off the Logitech G635's sidetone whenever the headset is connected.
+// SidetoneOff for Windows: turns off the Logitech G635's sidetone whenever the headset is connected.
 // Installs itself, lives in the system tray and starts at sign-in.
 
 #include <windows.h>
