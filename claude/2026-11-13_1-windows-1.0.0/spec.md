@@ -1,5 +1,7 @@
 # Sidetone Off — Windows
 
+**Model:** Opus, extra-high effort, in Claude in the browser.
+
 Windows port of my macOS menu-bar app **Sidetone Off** (reference source in `mac-reference/`).
 It turns off the Logitech G635's sidetone whenever the headset is connected. Tray app, starts at
 login, shipped as an installer. Replaces Logitech G HUB for this one job (G HUB is uninstalled).
