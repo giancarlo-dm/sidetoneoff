@@ -28,6 +28,9 @@ Every piece of work, whether a new version, a feature, or a fix from a ticket, g
 
 **research → spec → plan → pre-implementation review → implementation → validation → review**
 
+- **Implementation** goes phase by phase. The engineer reviews and commits each phase by hand.
+- **Validation and review** run once, after the whole plan is implemented and committed, and **only when the engineer asks for them**. They never run during a phase.
+
 Its documents go in `claude/<date>_<n>-<topic>-<version>/`, e.g. `claude/2026-11-24_1-windows-1.1.0/`.
 
 ### Models
@@ -43,7 +46,11 @@ Its documents go in `claude/<date>_<n>-<topic>-<version>/`, e.g. `claude/2026-11
 - Claude knows its model from its environment, and its effort from `modelSettings` in Claude Code's settings (`~/.claude/settings.json`). If it can't tell, it asks the engineer.
 - Agents are spawned with the Agent tool's `subagent_type: "general-purpose"` (read-only types can't run the app or write a report), `model` (`"fable"`, `"opus"`, `"sonnet"`) and `effort` (`"high"`, `"xhigh"`).
 - **No agent changes code.** Agents report; Claude verifies and fixes. The only file an agent writes is the pre-implementation review's report.
-- Validation and review agents get the phase's uncommitted changes: `git diff`, **plus the new files**, which `git diff` doesn't show (`git status` lists them as untracked).
+- **Validation and review agents get the full context:**
+  - the feature branch's committed work: `git diff main...HEAD`, which also shows the files the branch added;
+  - the research (or the ticket), the spec and the plan;
+  - the implementation report: the deviations, and why;
+  - the pre-implementation review: its findings, and how each was handled.
 - The pre-implementation review picks its model from the `**Model:**` line of the research, spec and plan (see Documents).
 
 ### 1. Research: `research.md`
@@ -98,20 +105,31 @@ It starts automatically when the engineer asks to implement the plan. It runs be
 
 The engineer reviews as a Java/TypeScript developer, so the code stays plain, and each phase report explains new C++ ideas in Java/TS terms ("C++ notes").
 
+**The end of a phase:**
+1. **Claude runs its own checks:** the build, the tests, and the phase's checks in the plan.
+2. **Claude stops and reports:**
+   - what changed, and any deviations;
+   - the checks, with their output;
+   - the engineer's steps;
+   - the commit message.
+3. **The engineer does the hands-on steps.** Claude gives exact instructions and checks the result in the app's log.
+4. **The engineer reviews the phase and commits it.** The next phase starts only after the engineer's go.
+
 ### 6. Validation
 
-**Claude spawns a validation agent** (`general-purpose`), on the models in the table above. It checks the phase against two references:
-- **The plan and the spec:** everything the phase lists is done and matches the design, and nothing else slipped in. Deviations are in the implementation report.
-- **The problem:** the change actually solves the issue described in `research.md`, or in the ticket the work comes from. This is checked on the real app, not only by reading the code.
+Only when the engineer asks, after the last phase is committed.
 
-At the last phase, the agent validates the whole work end to end against the research or ticket.
+**Claude spawns a validation agent** (`general-purpose`), on the models in the table above, with the full context (see Models). It checks the whole work against two references:
+- **The plan and the spec:** everything the plan lists is done and matches the design, as amended by the deviations in the implementation report, and nothing else slipped in. Every real deviation is recorded there, and every pre-implementation finding marked as handled really is.
+- **The problem:** the work actually solves the issue described in `research.md`, or in the ticket it comes from, end to end. This is checked on the real app, not only by reading the code.
 
-- Claude verifies each finding and fixes the confirmed ones that are in scope, as in the review.
-- Agents can't talk to the engineer, so the steps that need the engineer's hands are Claude's to ask for, at the end of the phase (below).
+Agents can't talk to the engineer, so Claude asks for any steps that need the engineer's hands.
 
 ### 7. Review
 
-A code review of the phase's diff, by **five agents in parallel**, one per aspect:
+Only when the engineer asks, after the last phase is committed.
+
+A code review of the feature branch's diff, by **five agents in parallel**, one per aspect:
 
 | Aspect | Looks for |
 |---|---|
@@ -122,18 +140,10 @@ A code review of the phase's diff, by **five agents in parallel**, one per aspec
 | **Best practices** | Code style and quality: the codebase's conventions, readability for a Java/TS reader, naming, comments, and sound use of the language and the platform. |
 
 - The agents run on the models in the table above.
-- Each agent gets the phase's changes (see Models), the spec and plan, and its aspect.
-- Claude verifies each finding against the code and fixes the confirmed ones that are in scope. The phase report lists every finding as fixed, or not fixed and why.
+- Each agent gets the full context (see Models) and its aspect. A recorded deviation, with its reason, isn't a finding in itself; the agent judges whether the reason holds.
 
-### The end of a phase
+### After validation or review
 
-1. **Claude runs its own checks again** (build, tests, the plan's checks) after the validation and review fixes, so the report shows the results of the final code.
-2. **Claude stops and reports:**
-   - what changed, and any deviations;
-   - the checks, with their output;
-   - the validation findings;
-   - the review findings;
-   - the engineer's steps;
-   - the commit message.
-3. **The engineer's hands-on steps come last**, on the final code, so a fix can't make them stale. Claude gives exact instructions and checks the result in the app's log.
-4. The next phase starts only after the engineer's go.
+- Claude verifies each finding against the code, and fixes the confirmed ones that are in scope.
+- Claude runs its checks again on the fixed code.
+- Claude reports every finding, as fixed or not fixed and why, and hands over the commit message for the fixes. The engineer reviews and commits them, as for a phase.
