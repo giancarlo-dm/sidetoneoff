@@ -36,12 +36,14 @@ Its documents go in `claude/<date>_<n>-<topic>-<version>/`, e.g. `claude/2026-11
 |---|---|
 | Research, spec, plan | **Fable, high**, preferred. If the session isn't on Fable, Claude asks the engineer to switch to it, when it's available to them. Otherwise **Opus, extra high: mandatory**. |
 | Pre-implementation review | An agent on **Sonnet, extra high** if Opus wrote the research, spec and plan; on **Opus, extra high** if Fable did. |
-| Implementation and validation | **Opus, extra high: mandatory.** |
-| Review | Agents on **Fable, high**; on **Sonnet, extra high** if Fable isn't available. |
+| Implementation | **Opus, extra high: mandatory.** |
+| Validation and review | Agents on **Fable, high**; on **Sonnet, extra high** if Fable isn't available. |
 
 - **Mandatory:** before the step starts, Claude checks its own configuration. It refuses to start the step in any other configuration, unless the engineer explicitly says to override.
 - Claude knows its model from its environment, and its effort from `modelSettings` in Claude Code's settings (`~/.claude/settings.json`). If it can't tell, it asks the engineer.
-- Agents are spawned with the Agent tool's `model` (`"fable"`, `"opus"`, `"sonnet"`) and `effort` (`"high"`, `"xhigh"`).
+- Agents are spawned with the Agent tool's `subagent_type: "general-purpose"` (read-only types can't run the app or write a report), `model` (`"fable"`, `"opus"`, `"sonnet"`) and `effort` (`"high"`, `"xhigh"`).
+- **No agent changes code.** Agents report; Claude verifies and fixes. The only file an agent writes is the pre-implementation review's report.
+- Validation and review agents get the phase's uncommitted changes: `git diff`, **plus the new files**, which `git diff` doesn't show (`git status` lists them as untracked).
 - The pre-implementation review picks its model from the `**Model:**` line of the research, spec and plan (see Documents).
 
 ### 1. Research: `research.md`
@@ -84,7 +86,9 @@ It starts automatically when the engineer asks to implement the plan. It runs be
    - It doesn't hold → marked **Invalid** in the report, with why, and ignored.
    - It holds and is **Critical or Major** → it **blocks implementation**. Claude stops and asks the engineer to review and adjust the research, spec and plan.
    - It holds and is **Minor or Nit** → handled during implementation, and recorded in the implementation report.
-5. **If nothing blocks**, implementation starts with Phase 1.
+5. **If nothing blocks**, implementation starts with Phase 1. The report is committed with Phase 1.
+
+**After a block**, the engineer adjusts the documents and asks to implement again. The review then runs again with a fresh agent, on the adjusted documents, because changes can bring new errors. Each run adds a section to the same report ("Run 2"…), with its own model, effort and tokens. The engineer commits the report with the adjusted documents.
 
 ### 5. Implementation: `implementation-report.md`
 
@@ -96,12 +100,14 @@ The engineer reviews as a Java/TypeScript developer, so the code stays plain, an
 
 ### 6. Validation
 
-Claude checks the phase against two references:
+**Claude spawns a validation agent** (`general-purpose`), on the models in the table above. It checks the phase against two references:
 - **The plan and the spec:** everything the phase lists is done and matches the design, and nothing else slipped in. Deviations are in the implementation report.
 - **The problem:** the change actually solves the issue described in `research.md`, or in the ticket the work comes from. This is checked on the real app, not only by reading the code.
-  - Steps that need the engineer's hands are asked for with exact instructions, and Claude checks the result in the app's log.
 
-At the last phase, the whole work is validated end to end against the research or ticket.
+At the last phase, the agent validates the whole work end to end against the research or ticket.
+
+- Claude verifies each finding and fixes the confirmed ones that are in scope, as in the review.
+- Agents can't talk to the engineer, so the steps that need the engineer's hands are Claude's to ask for, at the end of the phase (below).
 
 ### 7. Review
 
@@ -116,15 +122,18 @@ A code review of the phase's diff, by **five agents in parallel**, one per aspec
 | **Best practices** | Code style and quality: the codebase's conventions, readability for a Java/TS reader, naming, comments, and sound use of the language and the platform. |
 
 - The agents run on the models in the table above.
-- Each agent gets the diff, the spec and plan, and its aspect.
+- Each agent gets the phase's changes (see Models), the spec and plan, and its aspect.
 - Claude verifies each finding against the code and fixes the confirmed ones that are in scope. The phase report lists every finding as fixed, or not fixed and why.
 
-**Then Claude stops and reports:**
-- what changed, and any deviations;
-- the checks, with their output;
-- the validation;
-- the review findings;
-- the engineer's steps;
-- the commit message.
+### The end of a phase
 
-The next phase starts only after the engineer's go.
+1. **Claude runs its own checks again** (build, tests, the plan's checks) after the validation and review fixes, so the report shows the results of the final code.
+2. **Claude stops and reports:**
+   - what changed, and any deviations;
+   - the checks, with their output;
+   - the validation findings;
+   - the review findings;
+   - the engineer's steps;
+   - the commit message.
+3. **The engineer's hands-on steps come last**, on the final code, so a fix can't make them stale. Claude gives exact instructions and checks the result in the app's log.
+4. The next phase starts only after the engineer's go.
